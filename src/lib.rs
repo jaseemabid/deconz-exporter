@@ -1,8 +1,15 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::error::Error;
 
-// ConBeeII gateway config
+#[cfg(not(test))]
+use log::{debug, warn};
+
+#[cfg(test)]
+use std::{println as debug, println as warn};
+
+/// ConBeeII gateway config
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Gateway {
     pub apiversion: String,
@@ -20,6 +27,7 @@ pub struct Gateway {
     pub zigbeechannel: u8,
 }
 
+/// Sensor config
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Sensor {
     pub config: HashMap<String, Value>,
@@ -77,44 +85,97 @@ pub struct Event {
     // The full sensor resource.  Only for added events of a sensor resource.
     #[serde(default)]
     pub sensor: HashMap<String, Value>,
+    // Undocumented, but present in API responses.
+    #[serde(default)]
+    pub attr: HashMap<String, Value>,
 }
 
+/// Sensor info key'ed by ID
 pub type Sensors = HashMap<u16, Sensor>;
 
-/// Read config from ConBee II REST API
-pub async fn config<'a>(host: &str, username: &str) -> Result<Gateway, reqwest::Error> {
-    reqwest::get(format!("{}/api/{}/config", host, username))
-        .await?
-        .json()
-        .await
+/// Callback function executed for every update event
+pub type Callback = fn(&mut Event) -> Result<(), Box<dyn Error>>;
+
+/// Read gateway config from ConBee II REST API
+pub fn gateway(host: &str, username: &str) -> Result<Gateway, reqwest::Error> {
+    reqwest::blocking::get(format!("{}/api/{}/config", host, username))?.json()
 }
 
 /// Read sensor from ConBee II REST API
-pub async fn sensors<'a>(host: &str, username: &str) -> Result<Sensors, reqwest::Error> {
-    reqwest::get(format!("{}/api/{}/sensors", host, username))
-        .await?
-        .json()
-        .await
+pub fn sensors(host: &str, username: &str) -> Result<Sensors, reqwest::Error> {
+    reqwest::blocking::get(format!("{}/api/{}/sensors", host, username))?.json()
 }
 
-/// Authenticate with ConBee II device
-mod auth {}
+/// Run listener for websocket events.
+pub fn run(url: &str) -> Result<(), Box<dyn Error>> {
+    stream(url, process)
+}
+
+/// Run a callback for each event received over websocket.
+//
+// NOTE: A stream of Events would have been much neater than a callback, but Rust makes that API significantly more
+// painful to implement.  Revisit this later.
+pub fn stream(url: &str, callback: Callback) -> Result<(), Box<dyn Error>> {
+    let (mut socket, _) = tungstenite::client::connect(url)?; // TODO: What's the second return argument here?
+
+    loop {
+        let message = socket.read_message()?;
+        match serde_json::from_str::<Event>(message.clone().into_text().unwrap().as_str()) {
+            Ok(mut event) => {
+                if let Err(err) = callback(&mut event) {
+                    warn!("Failed to handle event: `{:?}`: {:?}", event, err)
+                }
+            }
+            Err(err) => {
+                warn!("Failed to serialize, ignoring `{}`: {:?}", message, err)
+            }
+        }
+    }
+}
+
+/// Process events that can be handled and throw away everything else with a warning log.
+fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
+    let Event {
+        type_,
+        event,
+        id,
+        state,
+        ..
+    } = &e;
+
+    // 1. Events with attrs, use this to get sensor info
+    // 2. Events with state, use this to get real data
+
+    // State often has 2 keys, `lastupdated` and another one that is the actual data. Handle those, ignore the rest
+    if type_ == "event" && event == "changed" && !state.is_empty() {
+        for (k, v) in state {
+            if k == "lastupdated" {
+                continue;
+            }
+
+            debug!("Update metric {id}, {k} = {v}");
+        }
+    }
+
+    warn!("Ignoring unknown event {:?}", e);
+
+    Ok(())
+}
 
 #[cfg(test)]
 mod test {
     use super::*;
 
     const HOST: &str = "http://nyx.jabid.in:4501";
+    const WS: &str = "ws://nyx.jabid.in:4502";
     const USERNAME: &str = "381412B455";
 
-    #[tokio::test]
-    async fn test_config() {
-        let resp = config(HOST, USERNAME).await;
+    #[test]
+    fn read_config() {
+        let resp = gateway(HOST, USERNAME);
 
         match resp {
             Ok(cfg) => {
-                // println!("Got config {:#?}", cfg);
-
                 assert_eq!(cfg.apiversion, "1.16.0");
                 assert_eq!(cfg.bridgeid, "00212EFFFF07D25D")
             }
@@ -124,9 +185,9 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    async fn test_sensors() {
-        let resp = sensors(HOST, USERNAME).await;
+    #[test]
+    fn read_sensors() {
+        let resp = sensors(HOST, USERNAME);
 
         match resp {
             Ok(cfg) => {
@@ -140,15 +201,16 @@ mod test {
     }
 
     #[test]
-    fn test_serde_sensor() {
+    //#[ignore]
+    fn read_stream() {
+        stream(WS, |_| Ok(())).unwrap();
+    }
+
+    #[test]
+    fn serde_sensor() {
         let data = r#"
         {
-            "config": {
-              "battery": 100,
-              "offset": 0,
-              "on": true,
-              "reachable": true
-            },
+            "config": { "battery": 100, "offset": 0, "on": true, "reachable": true },
             "ep": 1,
             "etag": "e8a1e47355a41c2f0d7d0481e7377961",
             "lastannounced": null,
@@ -156,33 +218,18 @@ mod test {
             "manufacturername": "LUMI",
             "modelid": "lumi.weather",
             "name": "Office",
-            "state": {
-              "humidity": 4917,
-              "lastupdated": "2022-02-19T16:14:15.172"
-            },
+            "state": { "humidity": 4917, "lastupdated": "2022-02-19T16:14:15.172" },
             "swversion": "20191205",
             "type": "ZHAHumidity",
             "uniqueid": "00:15:8d:00:07:e0:83:5b-01-0405"
-          }"#;
+        }"#;
 
         assert!(serde_json::from_str::<Sensor>(data).is_ok());
     }
 
     #[test]
-    fn test_serde_socket_events() {
-        let events = r#"
-{"e":"changed","id":"6","r":"sensors","state":{"humidity":4610,"lastupdated":"2022-02-19T21:37:44.737"},"t":"event","uniqueid":"00:15:8d:00:07:e0:ac:42-01-0405"}
-{"e":"changed","id":"7","r":"sensors","state":{"lastupdated":"2022-02-19T21:37:44.740","pressure":1003},"t":"event","uniqueid":"00:15:8d:00:07:e0:ac:42-01-0403"}
-{"attr":{"id":"2","lastannounced":null,"lastseen":"2022-02-19T21:38Z","manufacturername":"LUMI","modelid":"lumi.weather","name":"Living room","swversion":"20191205","type":"ZHATemperature","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0402"},"e":"changed","id":"2","r":"sensors","t":"event","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0402"}
-{"e":"changed","id":"2","r":"sensors","state":{"lastupdated":"2022-02-19T21:38:11.933","temperature":2090},"t":"event","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0402"}
-{"attr":{"id":"3","lastannounced":null,"lastseen":"2022-02-19T21:38Z","manufacturername":"LUMI","modelid":"lumi.weather","name":"Living room","swversion":"20191205","type":"ZHAHumidity","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0405"},"e":"changed","id":"3","r":"sensors","t":"event","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0405"}
-{"attr":{"id":"4","lastannounced":null,"lastseen":"2022-02-19T21:38Z","manufacturername":"LUMI","modelid":"lumi.weather","name":"Living room","swversion":"20191205","type":"ZHAPressure","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0403"},"e":"changed","id":"4","r":"sensors","t":"event","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0403"}
-{"e":"changed","id":"3","r":"sensors","state":{"humidity":5434,"lastupdated":"2022-02-19T21:38:11.940"},"t":"event","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0405"}
-{"e":"changed","id":"4","r":"sensors","state":{"lastupdated":"2022-02-19T21:38:11.944","pressure":1003},"t":"event","uniqueid":"00:15:8d:00:07:e0:a8:15-01-0403"}
-{"attr":{"id":"1","lastannounced":null,"lastseen":"2022-02-19T21:38Z","manufacturername":"dresden elektronik","modelid":"ConBee II","name":"Configuration tool 1","swversion":"0x26660700","type":"Configuration tool","uniqueid":"00:21:2e:ff:ff:07:d2:5d-01"},"e":"changed","id":"1","r":"lights","t":"event","uniqueid":"00:21:2e:ff:ff:07:d2:5d-01"}
-{"attr":{"id":"1","lastannounced":null,"lastseen":"2022-02-19T21:39Z","manufacturername":"dresden elektronik","modelid":"ConBee II","name":"Configuration tool 1","swversion":"0x26660700","type":"Configuration tool","uniqueid":"00:21:2e:ff:ff:07:d2:5d-01"},"e":"changed","id":"1","r":"lights","t":"event","uniqueid":"00:21:2e:ff:ff:07:d2:5d-01"}
-          "#;
-
+    fn serde_socket_events() {
+        let events = include_str!("../events.json");
         for event in events.lines().filter(|l| !l.trim().is_empty()) {
             serde_json::from_str::<Event>(event)
                 .unwrap_or_else(|err| panic!("Failed to parse event {}: {}", &event, err));
