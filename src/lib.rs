@@ -1,13 +1,25 @@
+#[macro_use]
+extern crate lazy_static;
+
+use prometheus::{GaugeVec, Opts, Registry, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
+use std::sync::Mutex;
 
 #[cfg(not(test))]
 use log::{debug, warn};
 
 #[cfg(test)]
 use std::{println as debug, println as warn};
+
+lazy_static! {
+    /// Global prometheus registry for all metrics
+    static ref REGISTRY: Registry = Registry::new_custom(Some("deconz".into()), None).unwrap();
+    /// State machine for event update data
+    static ref SENSORS: Mutex<HashMap<String, Sensor>> = Default::default();
+}
 
 /// ConBeeII gateway config
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,20 +40,35 @@ pub struct Gateway {
 }
 
 /// Sensor config
-#[derive(Serialize, Deserialize, Debug)]
+///
+/// Present only for "ZHA{Humidity, Pressure, Switch, Temperature}, null for "Configuration tool"
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
+pub struct SensorConfig {
+    pub battery: f64,
+    pub offset: f64,
+    pub on: bool,
+    pub reachable: bool,
+}
+
+/// Sensor info
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sensor {
-    pub config: HashMap<String, Value>,
+    #[serde(default)]
+    pub config: Option<SensorConfig>,
     pub etag: Option<String>,
     pub lastannounced: Option<String>,
     pub lastseen: Option<String>,
     pub manufacturername: String,
     pub modelid: String,
     pub name: String,
+    #[serde(default)]
     pub state: HashMap<String, Value>,
     pub swversion: Option<String>,
     #[serde(rename = "type")]
     pub tipe: String,
     pub uniqueid: String,
+    #[serde(skip)]
+    dummy: String,
 }
 
 /// Websocket event from Conbee2
@@ -69,8 +96,8 @@ pub struct Event {
     // Depending on the `websocketnotifyall` setting: a map containing all or only the changed config attributes of a
     // sensor resource.  Only for changed events.
     #[serde(default)]
-    pub config: HashMap<String, Value>,
-    // The (new) name of a resource.  Only for changed events.
+    pub config: Option<SensorConfig>,
+    // The (new) name of a resource. Only for changed events.
     pub name: Option<String>,
     // Depending on the websocketnotifyall setting: a map containing all or only the changed state attributes of a
     // group, light, or sensor resource.  Only for changed events.
@@ -86,8 +113,7 @@ pub struct Event {
     #[serde(default)]
     pub sensor: HashMap<String, Value>,
     // Undocumented, but present in API responses.
-    #[serde(default)]
-    pub attr: HashMap<String, Value>,
+    pub attr: Option<Sensor>,
 }
 
 /// Sensor info key'ed by ID
@@ -134,32 +160,100 @@ pub fn stream(url: &str, callback: Callback) -> Result<(), Box<dyn Error>> {
 }
 
 /// Process events that can be handled and throw away everything else with a warning log.
+///
+/// The events structure is a bit messy and not in a good shape. See documentation of `Event` for details.
+///
+/// Events with `attrs` are used to get human readable labels and stored in a static map for future lookup, when state
+/// updates arrive without these attributes.
 fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
-    let Event {
-        type_,
-        event,
-        id,
-        state,
-        ..
-    } = &e;
+    let labels = vec!["manufacturername", "modelid", "name", "swversion", "type"];
 
-    // 1. Events with attrs, use this to get sensor info
-    // 2. Events with state, use this to get real data
+    // Sensor attributes contains human friendly names and labels. Store them now for future events with no attributes.
+    if let Some(attr) = &e.attr {
+        if e.type_ == "event" && e.event == "changed" {
+            SENSORS
+                .lock()
+                .unwrap()
+                .insert(e.id.to_string(), attr.clone());
+            return Ok(());
+        }
+    }
 
     // State often has 2 keys, `lastupdated` and another one that is the actual data. Handle those, ignore the rest
-    if type_ == "event" && event == "changed" && !state.is_empty() {
-        for (k, v) in state {
+    if e.type_ == "event" && e.event == "changed" && !e.state.is_empty() {
+        let s = SENSORS.lock().unwrap().get(&e.id).unwrap().clone();
+
+        for (k, v) in &e.state {
             if k == "lastupdated" {
                 continue;
             }
 
-            debug!("Update metric {id}, {k} = {v}");
+            let opts = Opts::new(k, format!("Generic {} metric", k));
+            let gauge = GaugeVec::new(opts, &labels).unwrap();
+
+            // Register metric and ignore duplicates since we have no way of knowing all the metrics upfront.
+            match REGISTRY.register(Box::new(gauge.clone())) {
+                Ok(()) | Err(prometheus::Error::AlreadyReg) => {}
+                Err(err) => return Err(err.into()),
+            }
+
+            debug!("Updating metric ID:{}, {k}:{v}", e.id);
+            gauge.with(&s.labels()).set(v.as_f64().unwrap());
+
+            // // Gather the metrics.
+            // let encoder = TextEncoder::new();
+            // let metric_families = REGISTRY.gather();
+            // let metrics = encoder.encode_to_string(&metric_families).unwrap();
+
+            // // Output to the standard output.
+            // println!("{}", metrics);
+
+            return Ok(());
+        }
+
+        return Ok(());
+    }
+
+    // Config change should be pretty much identical to state change
+    if let Some(config) = &e.config {
+        if e.type_ == "event" && e.event == "changed" {
+            let s = SENSORS.lock().unwrap().get(&e.id).unwrap().clone();
+
+            let opts = Opts::new("battery", "Sensor battery level");
+            let gauge = GaugeVec::new(opts, &labels).unwrap();
+
+            // Register metric and ignore duplicates
+            match REGISTRY.register(Box::new(gauge.clone())) {
+                Ok(()) | Err(prometheus::Error::AlreadyReg) => {}
+                Err(err) => return Err(err.into()),
+            }
+
+            debug!("Updating metric ID:{}, battery:{}", e.id, config.battery);
+            gauge.with(&s.labels()).set(config.battery);
+
+            return Ok(());
         }
     }
 
     warn!("Ignoring unknown event {:?}", e);
 
     Ok(())
+}
+
+impl Sensor {
+    /// Convert sensor into prometheus labels
+    fn labels(&self) -> HashMap<&str, &str> {
+        vec![
+            ("manufacturername", &self.manufacturername),
+            ("modelid", &self.modelid),
+            ("name", &self.name),
+            ("swversion", self.swversion.as_ref().unwrap_or(&self.dummy)),
+            ("type", &self.tipe),
+        ]
+        .into_iter()
+        .map(|(name, value)| (name, value.as_str()))
+        .collect()
+    }
 }
 
 #[cfg(test)]
@@ -207,6 +301,18 @@ mod test {
     }
 
     #[test]
+    fn test_process() {
+        let events = include_str!("../events.json");
+        for event in events.lines().filter(|l| !l.trim().is_empty()) {
+            let mut e = serde_json::from_str::<Event>(event)
+                .unwrap_or_else(|err| panic!("Failed to parse event {}: {}", &event, err));
+
+            process(&mut e)
+                .unwrap_or_else(|err| panic!("Failed to process event {:?}: {}", &e, err));
+        }
+    }
+
+    #[test]
     fn serde_sensor() {
         let data = r#"
         {
@@ -225,14 +331,5 @@ mod test {
         }"#;
 
         assert!(serde_json::from_str::<Sensor>(data).is_ok());
-    }
-
-    #[test]
-    fn serde_socket_events() {
-        let events = include_str!("../events.json");
-        for event in events.lines().filter(|l| !l.trim().is_empty()) {
-            serde_json::from_str::<Event>(event)
-                .unwrap_or_else(|err| panic!("Failed to parse event {}: {}", &event, err));
-        }
     }
 }
