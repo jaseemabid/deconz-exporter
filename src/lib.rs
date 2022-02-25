@@ -165,7 +165,7 @@ pub fn stream(url: &str, callback: Callback) -> Result<(), Box<dyn Error>> {
 ///
 /// Events with `attrs` are used to get human readable labels and stored in a static map for future lookup, when state
 /// updates arrive without these attributes.
-fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
+pub fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
     let labels = vec!["manufacturername", "modelid", "name", "swversion", "type"];
 
     // Sensor attributes contains human friendly names and labels. Store them now for future events with no attributes.
@@ -200,14 +200,6 @@ fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
             debug!("Updating metric ID:{}, {k}:{v}", e.id);
             gauge.with(&s.labels()).set(v.as_f64().unwrap());
 
-            // // Gather the metrics.
-            // let encoder = TextEncoder::new();
-            // let metric_families = REGISTRY.gather();
-            // let metrics = encoder.encode_to_string(&metric_families).unwrap();
-
-            // // Output to the standard output.
-            // println!("{}", metrics);
-
             return Ok(());
         }
 
@@ -238,6 +230,13 @@ fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
     warn!("Ignoring unknown event {:?}", e);
 
     Ok(())
+}
+
+/// Export prometheus metrics as a string
+pub fn metrics() -> String {
+    let encoder = TextEncoder::new();
+    let metric_families = REGISTRY.gather();
+    encoder.encode_to_string(&metric_families).unwrap()
 }
 
 impl Sensor {
