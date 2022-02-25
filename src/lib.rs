@@ -9,10 +9,10 @@ use std::error::Error;
 use std::sync::Mutex;
 
 #[cfg(not(test))]
-use log::{debug, warn};
+use log::{debug, info, warn};
 
 #[cfg(test)]
-use std::{println as debug, println as warn};
+use std::{println as debug, println as warn, println as info};
 
 lazy_static! {
     /// Global prometheus registry for all metrics
@@ -134,6 +134,7 @@ pub fn sensors(host: &str, username: &str) -> Result<Sensors, reqwest::Error> {
 
 /// Run listener for websocket events.
 pub fn run(url: &str) -> Result<(), Box<dyn Error>> {
+    info!("🔌 Start listening for websocket events at {url}");
     stream(url, process)
 }
 
@@ -166,6 +167,8 @@ pub fn stream(url: &str, callback: Callback) -> Result<(), Box<dyn Error>> {
 /// Events with `attrs` are used to get human readable labels and stored in a static map for future lookup, when state
 /// updates arrive without these attributes.
 pub fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
+    debug!("Received event for {}", e.id);
+
     let labels = vec!["manufacturername", "modelid", "name", "swversion", "type"];
 
     // Sensor attributes contains human friendly names and labels. Store them now for future events with no attributes.

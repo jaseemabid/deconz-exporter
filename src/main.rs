@@ -1,4 +1,4 @@
-use conbee2_exporter::{metrics, process, Event};
+use conbee2_exporter::{metrics, run};
 use log::info;
 use std::thread;
 
@@ -12,14 +12,7 @@ fn main() {
     info!("🚀 Starting conbee2-exporter");
 
     thread::spawn(|| {
-        let events = include_str!("../events.json");
-        for event in events.lines().filter(|l| !l.trim().is_empty()) {
-            let mut e = serde_json::from_str::<Event>(event)
-                .unwrap_or_else(|err| panic!("Failed to parse event {}: {}", &event, err));
-
-            process(&mut e)
-                .unwrap_or_else(|err| panic!("Failed to process event {:?}: {}", &e, err));
-        }
+        run("ws://nyx.jabid.in:4502").unwrap();
     });
 
     let server = Server::http("0.0.0.0:8000").unwrap();
