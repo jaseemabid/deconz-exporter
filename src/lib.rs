@@ -4,7 +4,7 @@ extern crate lazy_static;
 use prometheus::{GaugeVec, Opts, Registry, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, error::Error, sync::Mutex};
+use std::{collections::HashMap, error::Error};
 
 #[cfg(not(test))]
 use log::{debug, info, warn};
@@ -14,9 +14,7 @@ use std::{println as debug, println as warn, println as info};
 
 lazy_static! {
     /// Global prometheus registry for all metrics
-    static ref REGISTRY: Registry = Registry::new_custom(Some("deconz".into()), None).unwrap();
-    /// State machine for event update data
-    static ref SENSORS: Mutex<HashMap<String, Sensor>> = Default::default();
+    static ref REGISTRY: Registry = Registry::new_custom(Some("deconz".into()), None).expect("Failed to create registry");
 }
 
 /// ConBeeII gateway config
@@ -115,10 +113,10 @@ pub struct Event {
 }
 
 /// Sensor info key'ed by ID
-pub type Sensors = HashMap<u16, Sensor>;
+pub type Sensors = HashMap<String, Sensor>;
 
 /// Callback function executed for every update event
-pub type Callback = fn(&mut Event) -> Result<(), Box<dyn Error>>;
+pub type Callback = fn(&mut Event, &mut Sensors) -> Result<(), Box<dyn Error>>;
 
 /// Read gateway config from ConBee II REST API
 pub fn gateway(host: &str, username: &str) -> Result<Gateway, reqwest::Error> {
@@ -133,26 +131,31 @@ pub fn sensors(host: &str, username: &str) -> Result<Sensors, reqwest::Error> {
 /// Run listener for websocket events.
 pub fn run(url: &str) -> Result<(), Box<dyn Error>> {
     info!("🔌 Start listening for websocket events at {url}");
-    stream(url, process)
+
+    // State machine for event update data
+    let mut sensors: Sensors = Default::default();
+    stream(url, &mut sensors, process)
 }
 
 /// Run a callback for each event received over websocket.
 //
 // NOTE: A stream of Events would have been much neater than a callback, but Rust makes that API significantly more
 // painful to implement.  Revisit this later.
-pub fn stream(url: &str, callback: Callback) -> Result<(), Box<dyn Error>> {
+//
+pub fn stream(url: &str, state: &mut Sensors, callback: Callback) -> Result<(), Box<dyn Error>> {
     let (mut socket, _) = tungstenite::client::connect(url)?; // TODO: What's the second return argument here?
 
     loop {
-        let message = socket.read_message()?;
-        match serde_json::from_str::<Event>(message.clone().into_text().unwrap().as_str()) {
+        match serde_json::from_str::<Event>(socket.read_message()?.to_text()?) {
             Ok(mut event) => {
-                if let Err(err) = callback(&mut event) {
+                // Failing to process a single event is alright, and this process should just continue. Non recoverable
+                // errors should bubble up so that the whole stream can be reestablished.
+                if let Err(err) = callback(&mut event, state) {
                     warn!("Failed to handle event: `{:?}`: {:?}", event, err)
                 }
             }
             Err(err) => {
-                warn!("Failed to serialize, ignoring `{}`: {:?}", message, err)
+                warn!("Failed to serialize, ignoring message: {:?}", err)
             }
         }
     }
@@ -164,7 +167,7 @@ pub fn stream(url: &str, callback: Callback) -> Result<(), Box<dyn Error>> {
 ///
 /// Events with `attrs` are used to get human readable labels and stored in a static map for future lookup, when state
 /// updates arrive without these attributes.
-pub fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
+pub fn process(e: &mut Event, state: &mut Sensors) -> Result<(), Box<dyn Error>> {
     debug!("Received event for {}", e.id);
 
     let labels = vec!["manufacturername", "modelid", "name", "swversion", "type"];
@@ -172,17 +175,14 @@ pub fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
     // Sensor attributes contains human friendly names and labels. Store them now for future events with no attributes.
     if let Some(attr) = &e.attr {
         if e.type_ == "event" && e.event == "changed" {
-            SENSORS
-                .lock()
-                .unwrap()
-                .insert(e.id.to_string(), attr.clone());
+            state.insert(e.id.to_string(), attr.clone());
             return Ok(());
         }
     }
 
     // State often has 2 keys, `lastupdated` and another one that is the actual data. Handle those, ignore the rest
     if e.type_ == "event" && e.event == "changed" && !e.state.is_empty() {
-        let s = SENSORS.lock().unwrap().get(&e.id).unwrap().clone();
+        let s = state.get(&e.id).unwrap().clone();
 
         for (k, v) in &e.state {
             if k == "lastupdated" {
@@ -211,7 +211,7 @@ pub fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
     // Config change should be pretty much identical to state change
     if let Some(config) = &e.config {
         if e.type_ == "event" && e.event == "changed" {
-            let s = SENSORS.lock().unwrap().get(&e.id).unwrap().clone();
+            let s = state.get(&e.id).unwrap().clone();
 
             let opts = Opts::new("battery", "Sensor battery level");
             let gauge = GaugeVec::new(opts, &labels).unwrap();
@@ -298,17 +298,19 @@ mod test {
     #[test]
     //#[ignore]
     fn read_stream() {
-        stream(WS, |_| Ok(())).unwrap();
+        stream(WS, &mut Default::default(), |_, _| Ok(())).unwrap();
     }
 
     #[test]
     fn test_process() {
         let events = include_str!("../events.json");
+        let mut state: Sensors = Default::default();
+
         for event in events.lines().filter(|l| !l.trim().is_empty()) {
             let mut e = serde_json::from_str::<Event>(event)
                 .unwrap_or_else(|err| panic!("Failed to parse event {}: {}", &event, err));
 
-            process(&mut e)
+            process(&mut e, &mut state)
                 .unwrap_or_else(|err| panic!("Failed to process event {:?}: {}", &e, err));
         }
     }
