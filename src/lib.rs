@@ -182,27 +182,29 @@ pub fn process(e: &mut Event, state: &mut Sensors) -> Result<(), Box<dyn Error>>
 
     // State often has 2 keys, `lastupdated` and another one that is the actual data. Handle those, ignore the rest
     if e.type_ == "event" && e.event == "changed" && !e.state.is_empty() {
-        let s = state.get(&e.id).unwrap().clone();
-
-        for (k, v) in &e.state {
-            if k == "lastupdated" {
-                continue;
-            }
-
-            if let Some(val) = v.as_f64() {
-                debug!("Updating metric ID:{}, {k}:{v}", e.id);
-                let opts = Opts::new(k, format!("Generic {} metric", k));
-                let gauge = GaugeVec::new(opts, &labels).unwrap();
-                // Register metric and ignore duplicates since we have no way of knowing all the metrics upfront.
-                match REGISTRY.register(Box::new(gauge.clone())) {
-                    Ok(()) | Err(prometheus::Error::AlreadyReg) => {}
-                    Err(err) => return Err(err.into()),
+        if let Some(sensor) = state.get(&e.id) {
+            for (k, v) in &e.state {
+                if k == "lastupdated" {
+                    continue;
                 }
-                gauge.with(&s.labels()).set(val);
-            } else {
-                debug!("Ignoring metric ID:{}, {k}:{v}", e.id);
+
+                if let Some(val) = v.as_f64() {
+                    debug!("Updating metric ID:{}, {k}:{v}", e.id);
+                    let opts = Opts::new(k, format!("Generic {} metric", k));
+                    let gauge = GaugeVec::new(opts, &labels).unwrap();
+                    // Register metric and ignore duplicates since we have no way of knowing all the metrics upfront.
+                    match REGISTRY.register(Box::new(gauge.clone())) {
+                        Ok(()) | Err(prometheus::Error::AlreadyReg) => {}
+                        Err(err) => return Err(err.into()),
+                    }
+                    gauge.with(&sensor.labels()).set(val);
+                } else {
+                    debug!("Ignoring metric ID:{}, {k}:{v}", e.id);
+                }
+                return Ok(());
             }
-            return Ok(());
+        } else {
+            warn!("Ignoring event update for unknown sensor {}: {:?}", e.id, e)
         }
 
         return Ok(());
