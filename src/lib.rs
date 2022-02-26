@@ -4,9 +4,7 @@ extern crate lazy_static;
 use prometheus::{GaugeVec, Opts, Registry, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
-use std::error::Error;
-use std::sync::Mutex;
+use std::{collections::HashMap, error::Error, sync::Mutex};
 
 #[cfg(not(test))]
 use log::{debug, info, warn};
@@ -191,18 +189,19 @@ pub fn process(e: &mut Event) -> Result<(), Box<dyn Error>> {
                 continue;
             }
 
-            let opts = Opts::new(k, format!("Generic {} metric", k));
-            let gauge = GaugeVec::new(opts, &labels).unwrap();
-
-            // Register metric and ignore duplicates since we have no way of knowing all the metrics upfront.
-            match REGISTRY.register(Box::new(gauge.clone())) {
-                Ok(()) | Err(prometheus::Error::AlreadyReg) => {}
-                Err(err) => return Err(err.into()),
+            if let Some(val) = v.as_f64() {
+                debug!("Updating metric ID:{}, {k}:{v}", e.id);
+                let opts = Opts::new(k, format!("Generic {} metric", k));
+                let gauge = GaugeVec::new(opts, &labels).unwrap();
+                // Register metric and ignore duplicates since we have no way of knowing all the metrics upfront.
+                match REGISTRY.register(Box::new(gauge.clone())) {
+                    Ok(()) | Err(prometheus::Error::AlreadyReg) => {}
+                    Err(err) => return Err(err.into()),
+                }
+                gauge.with(&s.labels()).set(val);
+            } else {
+                debug!("Ignoring metric ID:{}, {k}:{v}", e.id);
             }
-
-            debug!("Updating metric ID:{}, {k}:{v}", e.id);
-            gauge.with(&s.labels()).set(v.as_f64().unwrap());
-
             return Ok(());
         }
 
