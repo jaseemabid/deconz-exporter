@@ -1,10 +1,12 @@
-#[macro_use]
-extern crate lazy_static;
+use std::{collections::HashMap, error::Error};
 
-use prometheus::{GaugeVec, Opts, Registry, TextEncoder};
+use prometheus::{
+    core::Collector, opts, register_gauge_vec_with_registry, GaugeVec, Registry, TextEncoder,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, error::Error};
+#[macro_use]
+extern crate lazy_static;
 
 #[cfg(not(test))]
 use log::{debug, info, warn};
@@ -67,6 +69,11 @@ pub struct Sensor {
     dummy: String,
 }
 
+pub struct State {
+    sensors: HashMap<String, Sensor>,
+    metrics: HashMap<String, GaugeVec>,
+}
+
 /// Websocket event from Conbee2
 //
 // https://dresden-elektronik.github.io/deconz-rest-doc/endpoints/websocket/#message-fields
@@ -112,29 +119,18 @@ pub struct Event {
     pub attr: Option<Sensor>,
 }
 
-/// Sensor info key'ed by ID
-pub type Sensors = HashMap<String, Sensor>;
-
 /// Callback function executed for every update event
-pub type Callback = fn(&mut Event, &mut Sensors) -> Result<(), Box<dyn Error>>;
+pub type Callback = fn(&mut Event, &mut State) -> Result<(), Box<dyn Error>>;
 
 /// Read gateway config from ConBee II REST API
 pub fn gateway(host: &str, username: &str) -> Result<Gateway, reqwest::Error> {
     reqwest::blocking::get(format!("{}/api/{}/config", host, username))?.json()
 }
 
-/// Read sensor from ConBee II REST API
-pub fn sensors(host: &str, username: &str) -> Result<Sensors, reqwest::Error> {
-    reqwest::blocking::get(format!("{}/api/{}/sensors", host, username))?.json()
-}
-
 /// Run listener for websocket events.
 pub fn run(url: &str) -> Result<(), Box<dyn Error>> {
-    info!("🔌 Start listening for websocket events at {url}");
-
-    // State machine for event update data
-    let mut sensors: Sensors = Default::default();
-    stream(url, &mut sensors, process)
+    let mut state = State::with_metrics();
+    stream(url, &mut state, process)
 }
 
 /// Run a callback for each event received over websocket.
@@ -142,9 +138,10 @@ pub fn run(url: &str) -> Result<(), Box<dyn Error>> {
 // NOTE: A stream of Events would have been much neater than a callback, but Rust makes that API significantly more
 // painful to implement.  Revisit this later.
 //
-pub fn stream(url: &str, state: &mut Sensors, callback: Callback) -> Result<(), Box<dyn Error>> {
-    let (mut socket, _) = tungstenite::client::connect(url)?; // TODO: What's the second return argument here?
+pub fn stream(url: &str, state: &mut State, callback: Callback) -> Result<(), Box<dyn Error>> {
+    info!("🔌 Start listening for websocket events at {url}");
 
+    let (mut socket, _) = tungstenite::client::connect(url)?;
     loop {
         match serde_json::from_str::<Event>(socket.read_message()?.to_text()?) {
             Ok(mut event) => {
@@ -167,37 +164,31 @@ pub fn stream(url: &str, state: &mut Sensors, callback: Callback) -> Result<(), 
 ///
 /// Events with `attrs` are used to get human readable labels and stored in a static map for future lookup, when state
 /// updates arrive without these attributes.
-pub fn process(e: &mut Event, state: &mut Sensors) -> Result<(), Box<dyn Error>> {
+pub fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     debug!("Received event for {}", e.id);
-
-    let labels = vec!["manufacturername", "modelid", "name", "swversion", "type"];
 
     // Sensor attributes contains human friendly names and labels. Store them now for future events with no attributes.
     if let Some(attr) = &e.attr {
         if e.type_ == "event" && e.event == "changed" {
-            state.insert(e.id.to_string(), attr.clone());
+            debug!("Updating attrs for {}", e.id);
+            state.sensors.insert(e.id.to_string(), attr.clone());
             return Ok(());
         }
     }
 
     // State often has 2 keys, `lastupdated` and another one that is the actual data. Handle those, ignore the rest
     if e.type_ == "event" && e.event == "changed" && !e.state.is_empty() {
-        if let Some(sensor) = state.get(&e.id) {
+        if let Some(sensor) = state.sensors.get(&e.id) {
             for (k, v) in &e.state {
                 if k == "lastupdated" {
                     continue;
                 }
 
-                if let Some(val) = v.as_f64() {
-                    debug!("Updating metric ID:{}, {k}:{v}", e.id);
-                    let opts = Opts::new(k, format!("Generic {} metric", k));
-                    let gauge = GaugeVec::new(opts, &labels).unwrap();
-                    // Register metric and ignore duplicates since we have no way of knowing all the metrics upfront.
-                    match REGISTRY.register(Box::new(gauge.clone())) {
-                        Ok(()) | Err(prometheus::Error::AlreadyReg) => {}
-                        Err(err) => return Err(err.into()),
+                if let Some(gauge) = state.metrics.get(k.as_str()) {
+                    if let Some(val) = v.as_f64() {
+                        debug!("Updating metric ID:{}, {k}:{v}", e.id);
+                        gauge.with(&sensor.labels(true)).set(val);
                     }
-                    gauge.with(&sensor.labels()).set(val);
                 } else {
                     debug!("Ignoring metric ID:{}, {k}:{v}", e.id);
                 }
@@ -213,20 +204,12 @@ pub fn process(e: &mut Event, state: &mut Sensors) -> Result<(), Box<dyn Error>>
     // Config change should be pretty much identical to state change
     if let Some(config) = &e.config {
         if e.type_ == "event" && e.event == "changed" {
-            let s = state.get(&e.id).unwrap().clone();
-
-            let opts = Opts::new("battery", "Sensor battery level");
-            let gauge = GaugeVec::new(opts, &labels).unwrap();
-
-            // Register metric and ignore duplicates
-            match REGISTRY.register(Box::new(gauge.clone())) {
-                Ok(()) | Err(prometheus::Error::AlreadyReg) => {}
-                Err(err) => return Err(err.into()),
-            }
-
             debug!("Updating metric ID:{}, battery:{}", e.id, config.battery);
-            gauge.with(&s.labels()).set(config.battery);
 
+            let s = state.sensors.get(&e.id).unwrap().clone();
+            let gauge = state.metrics.get("battery").unwrap();
+
+            gauge.with(&s.labels(false)).set(config.battery);
             return Ok(());
         }
     }
@@ -243,17 +226,65 @@ pub fn metrics() -> String {
     encoder.encode_to_string(&metric_families).unwrap()
 }
 
+impl State {
+    fn with_metrics() -> Self {
+        let mut s = State {
+            metrics: Default::default(),
+            sensors: Default::default(),
+        };
+
+        let metrics = vec![
+            register_gauge_vec_with_registry!(
+                opts!("battery", "Battery level of sensors"),
+                &["manufacturername", "modelid", "name", "swversion"],
+                REGISTRY
+            )
+            .unwrap(),
+            register_gauge_vec_with_registry!(
+                opts!("humidity", "Humidity level"),
+                &["manufacturername", "modelid", "name", "swversion", "type"],
+                REGISTRY,
+            )
+            .unwrap(),
+            register_gauge_vec_with_registry!(
+                opts!("pressure", "Pressure level"),
+                &["manufacturername", "modelid", "name", "swversion", "type"],
+                REGISTRY
+            )
+            .unwrap(),
+            register_gauge_vec_with_registry!(
+                opts!("temperature", "Temperature level"),
+                &["manufacturername", "modelid", "name", "swversion", "type"],
+                REGISTRY,
+            )
+            .unwrap(),
+        ];
+
+        for gauge in metrics {
+            s.metrics
+                .insert(gauge.desc()[0].fq_name.clone(), gauge.clone());
+        }
+
+        s
+    }
+}
+
 impl Sensor {
     /// Convert sensor into prometheus labels
-    fn labels(&self) -> HashMap<&str, &str> {
+    fn labels(&self, tipe: bool) -> HashMap<&str, &str> {
         vec![
             ("manufacturername", &self.manufacturername),
             ("modelid", &self.modelid),
             ("name", &self.name),
             ("swversion", self.swversion.as_ref().unwrap_or(&self.dummy)),
-            ("type", &self.tipe),
+            if tipe {
+                ("type", &self.tipe)
+            } else {
+                ("", &self.dummy)
+            },
         ]
         .into_iter()
+        .filter(|(name, _)| !name.is_empty())
         .map(|(name, value)| (name, value.as_str()))
         .collect()
     }
@@ -264,10 +295,10 @@ mod test {
     use super::*;
 
     const HOST: &str = "http://nyx.jabid.in:4501";
-    const WS: &str = "ws://nyx.jabid.in:4502";
     const USERNAME: &str = "381412B455";
 
     #[test]
+    #[ignore]
     fn read_config() {
         let resp = gateway(HOST, USERNAME);
 
@@ -283,30 +314,9 @@ mod test {
     }
 
     #[test]
-    fn read_sensors() {
-        let resp = sensors(HOST, USERNAME);
-
-        match resp {
-            Ok(cfg) => {
-                //println!("Got config {:#?}", cfg);
-                assert!(cfg.len() > 1, "Didn't get any sensor info");
-            }
-            Err(e) => {
-                panic!("Failed to read sensor config from home assistant: {}", e)
-            }
-        }
-    }
-
-    #[test]
-    //#[ignore]
-    fn read_stream() {
-        stream(WS, &mut Default::default(), |_, _| Ok(())).unwrap();
-    }
-
-    #[test]
     fn test_process() {
         let events = include_str!("../events.json");
-        let mut state: Sensors = Default::default();
+        let mut state = State::with_metrics();
 
         for event in events.lines().filter(|l| !l.trim().is_empty()) {
             let mut e = serde_json::from_str::<Event>(event)
@@ -315,26 +325,16 @@ mod test {
             process(&mut e, &mut state)
                 .unwrap_or_else(|err| panic!("Failed to process event {:?}: {}", &e, err));
         }
-    }
 
-    #[test]
-    fn serde_sensor() {
-        let data = r#"
-        {
-            "config": { "battery": 100, "offset": 0, "on": true, "reachable": true },
-            "ep": 1,
-            "etag": "e8a1e47355a41c2f0d7d0481e7377961",
-            "lastannounced": null,
-            "lastseen": "2022-02-19T16:14Z",
-            "manufacturername": "LUMI",
-            "modelid": "lumi.weather",
-            "name": "Office",
-            "state": { "humidity": 4917, "lastupdated": "2022-02-19T16:14:15.172" },
-            "swversion": "20191205",
-            "type": "ZHAHumidity",
-            "uniqueid": "00:15:8d:00:07:e0:83:5b-01-0405"
-        }"#;
+        // Now that all the data is handled, make sure metrics are present.
+        let m = metrics();
+        let m = m
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .collect::<Vec<_>>();
 
-        assert!(serde_json::from_str::<Sensor>(data).is_ok());
+        dbg!(&m);
+
+        assert!(m.len() > 10, "Too few metrics exported")
     }
 }
