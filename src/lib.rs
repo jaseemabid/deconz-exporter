@@ -5,6 +5,8 @@ use prometheus::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use url::Url;
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -33,7 +35,7 @@ pub struct Gateway {
     pub modelid: String,
     pub name: String,
     pub swversion: String,
-    pub websocketport: u32,
+    pub websocketport: u16,
     pub zigbeechannel: u8,
 }
 
@@ -123,14 +125,29 @@ pub struct Event {
 pub type Callback = fn(&mut Event, &mut State) -> Result<(), Box<dyn Error>>;
 
 /// Read gateway config from ConBee II REST API
-pub fn gateway(host: &str, username: &str) -> Result<Gateway, reqwest::Error> {
-    reqwest::blocking::get(format!("{}/api/{}/config", host, username))?.json()
+pub fn gateway(host: &Url, username: &str) -> Result<Gateway, reqwest::Error> {
+    let u = format!("{}/api/{}/config", host, username);
+    info!("Connecting to API gateway at {u}");
+    reqwest::blocking::get(u)?.json()
+}
+
+/// Discover websocket port from gateway config
+pub fn websocket(host: &Url, username: &str) -> Result<Url, Box<dyn Error>> {
+    let gw = gateway(host, username)?;
+    let mut host = host.clone();
+
+    host.set_scheme("ws").unwrap();
+    host.set_port(Some(gw.websocketport)).unwrap();
+
+    info!("Discovered websocket port at {}", host);
+    Ok(host)
 }
 
 /// Run listener for websocket events.
-pub fn run(url: &str) -> Result<(), Box<dyn Error>> {
+pub fn run(host: &Url, username: &str) -> Result<(), Box<dyn Error>> {
     let mut state = State::with_metrics();
-    stream(url, &mut state, process)
+    let socket = websocket(host, username)?;
+    stream(&socket, &mut state, process)
 }
 
 /// Run a callback for each event received over websocket.
@@ -138,7 +155,7 @@ pub fn run(url: &str) -> Result<(), Box<dyn Error>> {
 // NOTE: A stream of Events would have been much neater than a callback, but Rust makes that API significantly more
 // painful to implement.  Revisit this later.
 //
-pub fn stream(url: &str, state: &mut State, callback: Callback) -> Result<(), Box<dyn Error>> {
+pub fn stream(url: &Url, state: &mut State, callback: Callback) -> Result<(), Box<dyn Error>> {
     info!("🔌 Start listening for websocket events at {url}");
 
     let (mut socket, _) = tungstenite::client::connect(url)?;
@@ -294,13 +311,13 @@ impl Sensor {
 mod test {
     use super::*;
 
-    const HOST: &str = "http://nyx.jabid.in:4501";
-    const USERNAME: &str = "381412B455";
-
     #[test]
     #[ignore]
     fn read_config() {
-        let resp = gateway(HOST, USERNAME);
+        let resp = gateway(
+            &Url::parse("http://nyx.jabid.in:4501").unwrap(),
+            "381412B455",
+        );
 
         match resp {
             Ok(cfg) => {

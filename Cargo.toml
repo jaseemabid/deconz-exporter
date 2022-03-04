@@ -4,6 +4,7 @@ name = "conbee2-exporter"
 version = "0.1.0"
 
 [dependencies]
+clap = {version = "3.1.5", features = ["derive"]}
 env_logger = "0.9"
 lazy_static = "1.4.0"
 log = "0.4"
@@ -14,3 +15,4 @@ serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 tiny_http = "0.11.0"
 tungstenite = "0.17.1"
+url = "2.2.2"
