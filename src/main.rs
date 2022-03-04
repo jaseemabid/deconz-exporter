@@ -4,16 +4,16 @@ use std::thread;
 use tiny_http::{Method, Response, Server};
 use url::Url;
 
-use conbee2_exporter::{metrics, run};
+use deconz_exporter::{metrics, run};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Conbee2 API server url
+    /// deCONZ API server url
     #[clap(long, parse(try_from_str = Url::parse))]
     url: Url,
 
-    /// Conbee2 API username
+    /// deCONZ API username
     #[clap(long)]
     username: String,
 
@@ -28,7 +28,7 @@ fn main() {
         .filter_level(log::LevelFilter::Debug)
         .init();
 
-    info!("🚀 Starting conbee2-exporter");
+    info!("🚀 Starting deconz-exporter");
 
     thread::spawn(move || {
         run(&args.url, &args.username).unwrap();

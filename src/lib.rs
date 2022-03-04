@@ -21,7 +21,7 @@ lazy_static! {
     static ref REGISTRY: Registry = Registry::new_custom(Some("deconz".into()), None).expect("Failed to create registry");
 }
 
-/// ConBeeII gateway config
+/// deCONZ gateway config
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Gateway {
     pub apiversion: String,
@@ -76,7 +76,7 @@ pub struct State {
     metrics: HashMap<String, GaugeVec>,
 }
 
-/// Websocket event from Conbee2
+/// Websocket event from deCONZ for Conbee2
 //
 // https://dresden-elektronik.github.io/deconz-rest-doc/endpoints/websocket/#message-fields
 #[derive(Serialize, Deserialize, Debug)]
@@ -124,7 +124,7 @@ pub struct Event {
 /// Callback function executed for every update event
 pub type Callback = fn(&mut Event, &mut State) -> Result<(), Box<dyn Error>>;
 
-/// Read gateway config from ConBee II REST API
+/// Read gateway config from deCONZ REST API
 pub fn gateway(host: &Url, username: &str) -> Result<Gateway, reqwest::Error> {
     let u = format!("{}/api/{}/config", host, username);
     info!("Connecting to API gateway at {u}");
