@@ -66,7 +66,7 @@ deconz_temperature{manufacturername, modelid, name, swversion, type}
 
 2. Run `$ cargo test` just to be sure.
 
-## 📝 NOTES
+## 📝 Notes
 
 1. This exporter is only tested with a few devices I own. There is no guarantee that it would work with anything else.
 1. Feel free to send me PRs for [other devices supported][compatibility] by [Conbee II][conbee2]
@@ -75,6 +75,9 @@ deconz_temperature{manufacturername, modelid, name, swversion, type}
 1. Auto discovery of gateways might be nice.
 
 
+## ⚖️ License
+
+[MIT](https://choosealicense.com/licenses/mit)
 
 
 [compatibility]: https://phoscon.de/en/conbee2/compatible
