@@ -8,21 +8,25 @@ Exports prometheus metrics for sensors connected to [Conbee II][conbee2] USB gat
 ## 📈 Exported metrics
 
 ```
+# HELP deconz_gateway_info Gateway static info
+# TYPE deconz_gateway_info gauge
+deconz_gateway_info{apiversion, name}
+
 # HELP deconz_battery Battery level of sensors
 # TYPE deconz_battery gauge
 deconz_battery{manufacturername, modelid, name, swversion}
 
-# HELP deconz_humidity Humidity level
+# HELP deconz_humidity Relative humidity in percentage
 # TYPE deconz_humidity gauge
-deconz_humidity{manufacturername, modelid, name, swversion, type}
+deconz_humidity_ratio{manufacturername, modelid, name, swversion, type}
 
-# HELP deconz_pressure Pressure level
+# HELP deconz_pressure Pressure in hPa
 # TYPE deconz_pressure gauge
-deconz_pressure{manufacturername,modelid, name, swversion, type}
+deconz_pressure_hpa{manufacturername,modelid, name, swversion, type}
 
-# HELP deconz_temperature Temperature level
+# HELP deconz_temperature Temperature in degree Celsius
 # TYPE deconz_temperature gauge
-deconz_temperature{manufacturername, modelid, name, swversion, type}
+deconz_temperature_celsius{manufacturername, modelid, name, swversion, type}
 ```
 
 ## 🚲 Getting started
@@ -71,14 +75,14 @@ deconz_temperature{manufacturername, modelid, name, swversion, type}
 1. This exporter is only tested with a few devices I own. There is no guarantee that it would work with anything else.
 1. Feel free to send me PRs for [other devices supported][compatibility] by [Conbee II][conbee2]
 1. The auth flow is cumbersome and manual, would be great to automate this.
+1. Reconnect cleanly on websocket errors, right now the exporter just dies and gets restarted
 1. Process metrics are missing, should bring them back.
 1. Auto discovery of gateways might be nice.
-
+1. Add metrics on the number of events handled
 
 ## ⚖️ License
 
 [MIT](https://choosealicense.com/licenses/mit)
-
 
 [compatibility]: https://phoscon.de/en/conbee2/compatible
 [conbee2]: https://phoscon.de/en/conbee2

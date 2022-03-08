@@ -1,8 +1,8 @@
+#![feature(box_syntax)]
+
 use std::{collections::HashMap, error::Error};
 
-use prometheus::{
-    core::Collector, opts, register_gauge_vec_with_registry, GaugeVec, Registry, TextEncoder,
-};
+use prometheus::{labels, opts, GaugeVec, Registry, Result as PResult, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
@@ -18,7 +18,23 @@ use std::{println as debug, println as warn, println as info};
 
 lazy_static! {
     /// Global prometheus registry for all metrics
-    static ref REGISTRY: Registry = Registry::new_custom(Some("deconz".into()), None).expect("Failed to create registry");
+    static ref REGISTRY: Registry = Registry::new_custom(Some("deconz".into()), None)
+        .expect("Failed to create registry");
+
+    static ref INFO: GaugeVec = GaugeVec::new(opts!("gateway_info", "Gateway static info"),
+        &["name", "apiversion"]).unwrap();
+
+    static ref BATTERY: GaugeVec = GaugeVec::new(opts!("battery", "Battery level in percentage"),
+        &["manufacturername", "modelid", "name", "swversion"]).unwrap();
+
+    static ref TEMPERATURE: GaugeVec = GaugeVec::new(opts!("temperature_celsius", "Temperature in degree Celsius"),
+        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+
+    static ref PRESSURE: GaugeVec = GaugeVec::new(opts!("pressure_hpa", "Pressure in hPa"),
+        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+
+    static ref HUMIDITY: GaugeVec = GaugeVec::new(opts!("humidity_ratio", "Relative humidity in percentage"),
+        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
 }
 
 /// deCONZ gateway config
@@ -71,9 +87,10 @@ pub struct Sensor {
     dummy: String,
 }
 
+/// State carried around between events.
+#[derive(Default)]
 pub struct State {
     sensors: HashMap<String, Sensor>,
-    metrics: HashMap<String, GaugeVec>,
 }
 
 /// Websocket event from deCONZ for Conbee2
@@ -122,18 +139,23 @@ pub struct Event {
 }
 
 /// Callback function executed for every update event
-pub type Callback = fn(&mut Event, &mut State) -> Result<(), Box<dyn Error>>;
+type Callback = fn(&mut Event, &mut State) -> Result<(), Box<dyn Error>>;
 
 /// Read gateway config from deCONZ REST API
-pub fn gateway(host: &Url, username: &str) -> Result<Gateway, reqwest::Error> {
-    let u = format!("{}/api/{}/config", host, username);
-    info!("Connecting to API gateway at {u}");
-    reqwest::blocking::get(u)?.json()
+fn gateway(host: &Url, username: &str) -> Result<Gateway, reqwest::Error> {
+    let mut host = host.clone();
+    host.set_path(&format!("/api/{}/config", username));
+    info!("Connecting to API gateway at {host}");
+    reqwest::blocking::get(host)?.json()
 }
 
 /// Discover websocket port from gateway config
-pub fn websocket(host: &Url, username: &str) -> Result<Url, Box<dyn Error>> {
+fn websocket(host: &Url, username: &str) -> Result<Url, Box<dyn Error>> {
     let gw = gateway(host, username)?;
+
+    INFO.with(&labels! {"name" =>  gw.name.as_str(), "apiversion" => gw.apiversion.as_str()})
+        .set(1.0);
+
     let mut host = host.clone();
 
     host.set_scheme("ws").unwrap();
@@ -145,17 +167,16 @@ pub fn websocket(host: &Url, username: &str) -> Result<Url, Box<dyn Error>> {
 
 /// Run listener for websocket events.
 pub fn run(host: &Url, username: &str) -> Result<(), Box<dyn Error>> {
-    let mut state = State::with_metrics();
     let socket = websocket(host, username)?;
-    stream(&socket, &mut state, process)
+    register_metrics()?;
+    stream(&socket, &mut State::default(), process)
 }
 
 /// Run a callback for each event received over websocket.
 //
 // NOTE: A stream of Events would have been much neater than a callback, but Rust makes that API significantly more
 // painful to implement.  Revisit this later.
-//
-pub fn stream(url: &Url, state: &mut State, callback: Callback) -> Result<(), Box<dyn Error>> {
+fn stream(url: &Url, state: &mut State, callback: Callback) -> Result<(), Box<dyn Error>> {
     info!("🔌 Start listening for websocket events at {url}");
 
     let (mut socket, _) = tungstenite::client::connect(url)?;
@@ -181,7 +202,7 @@ pub fn stream(url: &Url, state: &mut State, callback: Callback) -> Result<(), Bo
 ///
 /// Events with `attrs` are used to get human readable labels and stored in a static map for future lookup, when state
 /// updates arrive without these attributes.
-pub fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
+fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     debug!("Received event for {}", e.id);
 
     // Sensor attributes contains human friendly names and labels. Store them now for future events with no attributes.
@@ -197,18 +218,22 @@ pub fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     if e.type_ == "event" && e.event == "changed" && !e.state.is_empty() {
         if let Some(sensor) = state.sensors.get(&e.id) {
             for (k, v) in &e.state {
-                if k == "lastupdated" {
-                    continue;
-                }
-
-                if let Some(gauge) = state.metrics.get(k.as_str()) {
-                    if let Some(val) = v.as_f64() {
-                        debug!("Updating metric ID:{}, {k}:{v}", e.id);
-                        gauge.with(&sensor.labels(true)).set(val);
+                match (k.as_str(), v.as_f64()) {
+                    ("lastupdated", _) => continue,
+                    ("pressure", Some(val)) => PRESSURE.with(&sensor.labels(true)).set(val),
+                    // Xiomi Aqara sensors report the temperature as 2134 instead of 21.34°C. Same for humidity. Scale it down.
+                    ("humidity", Some(val)) => HUMIDITY
+                        .with(&sensor.labels(true))
+                        .set(if val.abs() > 100.0 { val / 100.0 } else { val }),
+                    ("temperature", Some(val)) => {
+                        TEMPERATURE
+                            .with(&sensor.labels(true))
+                            .set(if val.abs() > 100.0 { val / 100.0 } else { val });
                     }
-                } else {
-                    debug!("Ignoring metric ID:{}, {k}:{v}", e.id);
-                }
+                    _ => {
+                        debug!("Ignoring metric ID:{}, {k}:{v}", e.id);
+                    }
+                };
                 return Ok(());
             }
         } else {
@@ -221,12 +246,12 @@ pub fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     // Config change should be pretty much identical to state change
     if let Some(config) = &e.config {
         if e.type_ == "event" && e.event == "changed" {
-            debug!("Updating metric ID:{}, battery:{}", e.id, config.battery);
-
-            let s = state.sensors.get(&e.id).unwrap().clone();
-            let gauge = state.metrics.get("battery").unwrap();
-
-            gauge.with(&s.labels(false)).set(config.battery);
+            if let Some(s) = state.sensors.get(&e.id) {
+                debug!("Updating metric ID:{}, battery:{}", e.id, config.battery);
+                BATTERY.with(&s.labels(false)).set(config.battery);
+            } else {
+                warn!("Unknown config change, ignoring it: {:?}", config)
+            }
             return Ok(());
         }
     }
@@ -243,47 +268,14 @@ pub fn metrics() -> String {
     encoder.encode_to_string(&metric_families).unwrap()
 }
 
-impl State {
-    fn with_metrics() -> Self {
-        let mut s = State {
-            metrics: Default::default(),
-            sensors: Default::default(),
-        };
-
-        let metrics = vec![
-            register_gauge_vec_with_registry!(
-                opts!("battery", "Battery level of sensors"),
-                &["manufacturername", "modelid", "name", "swversion"],
-                REGISTRY
-            )
-            .unwrap(),
-            register_gauge_vec_with_registry!(
-                opts!("humidity", "Humidity level"),
-                &["manufacturername", "modelid", "name", "swversion", "type"],
-                REGISTRY,
-            )
-            .unwrap(),
-            register_gauge_vec_with_registry!(
-                opts!("pressure", "Pressure level"),
-                &["manufacturername", "modelid", "name", "swversion", "type"],
-                REGISTRY
-            )
-            .unwrap(),
-            register_gauge_vec_with_registry!(
-                opts!("temperature", "Temperature level"),
-                &["manufacturername", "modelid", "name", "swversion", "type"],
-                REGISTRY,
-            )
-            .unwrap(),
-        ];
-
-        for gauge in metrics {
-            s.metrics
-                .insert(gauge.desc()[0].fq_name.clone(), gauge.clone());
-        }
-
-        s
-    }
+// Register metrics
+fn register_metrics() -> PResult<()> {
+    info!("Registering metrics",);
+    REGISTRY.register(box INFO.clone())?;
+    REGISTRY.register(box BATTERY.clone())?;
+    REGISTRY.register(box TEMPERATURE.clone())?;
+    REGISTRY.register(box PRESSURE.clone())?;
+    REGISTRY.register(box HUMIDITY.clone())
 }
 
 impl Sensor {
@@ -333,7 +325,8 @@ mod test {
     #[test]
     fn test_process() {
         let events = include_str!("../events.json");
-        let mut state = State::with_metrics();
+        register_metrics().unwrap();
+        let mut state = State::default();
 
         for event in events.lines().filter(|l| !l.trim().is_empty()) {
             let mut e = serde_json::from_str::<Event>(event)
