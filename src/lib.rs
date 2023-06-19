@@ -1,5 +1,3 @@
-#![feature(box_syntax)]
-
 use std::{collections::HashMap, error::Error};
 
 use prometheus::{labels, opts, GaugeVec, Registry, Result as PResult, TextEncoder};
@@ -271,11 +269,11 @@ pub fn metrics() -> String {
 // Register metrics
 fn register_metrics() -> PResult<()> {
     info!("Registering metrics",);
-    REGISTRY.register(box INFO.clone())?;
-    REGISTRY.register(box BATTERY.clone())?;
-    REGISTRY.register(box TEMPERATURE.clone())?;
-    REGISTRY.register(box PRESSURE.clone())?;
-    REGISTRY.register(box HUMIDITY.clone())
+    REGISTRY.register(Box::new(INFO.clone()))?;
+    REGISTRY.register(Box::new(BATTERY.clone()))?;
+    REGISTRY.register(Box::new(TEMPERATURE.clone()))?;
+    REGISTRY.register(Box::new(PRESSURE.clone()))?;
+    REGISTRY.register(Box::new(HUMIDITY.clone()))
 }
 
 impl Sensor {
