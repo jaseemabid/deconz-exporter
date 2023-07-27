@@ -1,6 +1,6 @@
 use clap::Parser;
 use log::info;
-use std::thread;
+use std::{panic, process, thread};
 use tiny_http::{Method, Response, Server};
 use url::Url;
 
@@ -29,6 +29,15 @@ fn main() {
         .init();
 
     info!("🚀 Starting deconz-exporter");
+
+    // take_hook() returns the default hook in case when a custom one is not set
+    let orig_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        // invoke the default handler and exit the process
+        info!("Something went terribly wrong and one of the threads panicked. Shutting down the main thread.");
+        orig_hook(panic_info);
+        process::exit(1);
+    }));
 
     thread::spawn(move || {
         run(&args.url, &args.username).unwrap();
