@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, error::Error};
 
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use prometheus::{labels, opts, GaugeVec, Registry, Result as PResult, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -233,8 +233,6 @@ fn stream(url: &Url, state: &mut State, callback: Callback) -> Result<(), Box<dy
 fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     debug!("Received event. id:{} type: {}", e.id, e.type_);
 
-    let now: DateTime<Utc> = Utc::now();
-
     // Sensor attributes contains human friendly names and labels. Store them
     // now for future events with no attributes.
     if let Some(attr) = &e.attr {
@@ -244,7 +242,7 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
 
             LASTSEEN
                 .with(&attr.labels(true))
-                .set((now - attr.lastseen).num_milliseconds() as f64);
+                .set(attr.lastseen.timestamp_millis() as f64);
 
             return Ok(());
         }
@@ -257,8 +255,9 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
 
         debug!("Update state for sensor '{}': {:?}",  sensor.name, change);
 
+
         LASTUPDATED.with(&sensor.labels(true))
-            .set((now - Utc.from_utc_datetime(&change.lastupdated)).num_milliseconds() as f64);
+            .set(change.lastupdated.timestamp_millis() as f64);
 
         if let Some(p) = change.pressure {
             PRESSURE.with(&sensor.labels(true)).set(p as f64);
