@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use prometheus::{labels, opts, GaugeVec, Registry, Result as PResult, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -34,6 +34,13 @@ lazy_static! {
 
     static ref HUMIDITY: GaugeVec = GaugeVec::new(opts!("humidity_ratio", "Relative humidity in percentage"),
         &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+
+    static ref LASTUPDATED: GaugeVec = GaugeVec::new(opts!("sensor_last_updated_ms", "Duration since the sensor was last updated in ms"),
+        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+
+    static ref LASTSEEN: GaugeVec = GaugeVec::new(opts!("sensor_last_seen_ms", "Duration since the sensor was last seen in ms"),
+        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+
 }
 
 /// deCONZ gateway config
@@ -65,13 +72,33 @@ pub struct SensorConfig {
     pub reachable: bool,
 }
 
+// State change
+//
+// Depending on the websocketnotifyall setting: a map containing all or only the
+// changed state attributes of a group, light, or sensor resource.  Only for
+// changed events.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StateChange {
+    pub temperature: Option<i32>,
+    pub humidity: Option<i32>,
+    pub pressure: Option<i32>,
+    // TODO: Unsure if this is local or UTC, there is no TZ on the timestamp :/
+    pub lastupdated: NaiveDateTime,
+}
+
 /// Sensor info
+///
+/// See [device
+/// spec](https://dresden-elektronik.github.io/deconz-rest-doc/devices/xiaomi/lumi_weather/)
+/// for more info.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sensor {
     #[serde(default)]
     pub config: Option<SensorConfig>,
     pub etag: Option<String>,
+    // Timestamp of the last power-cycle or rejoin.
     pub lastannounced: Option<DateTime<Utc>>,
+    // Timestamp of the last communication.
     #[serde(with = "iso8601_without_seconds")]
     pub lastseen: DateTime<Utc>,
     pub manufacturername: String,
@@ -123,8 +150,7 @@ pub struct Event {
     pub name: Option<String>,
     // Depending on the websocketnotifyall setting: a map containing all or only the changed state attributes of a
     // group, light, or sensor resource.  Only for changed events.
-    #[serde(default)]
-    pub state: HashMap<String, Value>,
+    pub state: Option<StateChange>,
     // The full group resource.  Only for added events of a group resource
     #[serde(default)]
     pub group: HashMap<String, Value>,
@@ -203,41 +229,51 @@ fn stream(url: &Url, state: &mut State, callback: Callback) -> Result<(), Box<dy
 /// Events with `attrs` are used to get human readable labels and stored in a static map for future lookup, when state
 /// updates arrive without these attributes.
 fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
-    debug!("Received event for {}", e.id);
+    debug!("Received event. id:{} type: {}", e.id, e.type_);
 
-    // Sensor attributes contains human friendly names and labels. Store them now for future events with no attributes.
+    let now: DateTime<Utc> = Utc::now();
+
+    // Sensor attributes contains human friendly names and labels. Store them
+    // now for future events with no attributes.
     if let Some(attr) = &e.attr {
         if e.type_ == "event" && e.event == "changed" {
-            debug!("Updating attrs for {}", e.id);
+            debug!("Updating attrs for {}: {:?}", e.id, e.attr);
             state.sensors.insert(e.id.to_string(), attr.clone());
+
+            LASTSEEN
+                .with(&attr.labels(true))
+                .set((now - attr.lastseen).num_milliseconds() as f64);
+
             return Ok(());
         }
     }
 
     // State often has 2 keys, `lastupdated` and another one that is the actual data. Handle those, ignore the rest
-    if e.type_ == "event" && e.event == "changed" && !e.state.is_empty() {
-        if let Some(sensor) = state.sensors.get(&e.id) {
-            for (k, v) in &e.state {
-                match (k.as_str(), v.as_f64()) {
-                    ("lastupdated", _) => continue,
-                    ("pressure", Some(val)) => PRESSURE.with(&sensor.labels(true)).set(val),
-                    // Xiomi Aqara sensors report the temperature as 2134 instead of 21.34°C. Same for humidity. Scale it down.
-                    ("humidity", Some(val)) => HUMIDITY
-                        .with(&sensor.labels(true))
-                        .set(if val.abs() > 100.0 { val / 100.0 } else { val }),
-                    ("temperature", Some(val)) => {
-                        TEMPERATURE
-                            .with(&sensor.labels(true))
-                            .set(if val.abs() > 100.0 { val / 100.0 } else { val });
-                    }
-                    _ => {
-                        debug!("Ignoring metric ID:{}, {k}:{v}", e.id);
-                    }
-                };
-                return Ok(());
-            }
-        } else {
-            warn!("Ignoring event update for unknown sensor {}: {:?}", e.id, e)
+    if let Some(change) = &e.state &&
+       let Some(sensor) = state.sensors.get(&e.id) &&
+       e.type_ == "event" && e.event == "changed" {
+
+        debug!("Update state for sensor '{}': {:?}",  sensor.name, change);
+
+        LASTUPDATED.with(&sensor.labels(true))
+            .set((now - Utc.from_utc_datetime(&change.lastupdated)).num_milliseconds() as f64);
+
+        if let Some(p) = change.pressure {
+            PRESSURE.with(&sensor.labels(true)).set(p as f64);
+        }
+
+        // Xiomi Aqara sensors report the temperature as 2134 instead of
+        // 21.34°C. Same for humidity. Scale it down.
+        if let Some(t) = change.temperature {
+            TEMPERATURE
+                .with(&sensor.labels(true))
+                .set(if t.abs() > 100 { t as f64 / 100.0 } else { t as f64 });
+        }
+
+        if let Some(h) = change.humidity {
+            HUMIDITY
+                .with(&sensor.labels(true))
+                .set(if h.abs() > 100 { h as f64 / 100.0 } else { h as f64 });
         }
 
         return Ok(());
@@ -247,7 +283,10 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     if let Some(config) = &e.config {
         if e.type_ == "event" && e.event == "changed" {
             if let Some(s) = state.sensors.get(&e.id) {
-                debug!("Updating metric ID:{}, battery:{}", e.id, config.battery);
+                debug!(
+                    "Updating battery for sensor '{}': {}",
+                    s.name, config.battery
+                );
                 BATTERY.with(&s.labels(false)).set(config.battery);
             } else {
                 warn!("Unknown config change, ignoring it: {:?}", config)
@@ -257,7 +296,6 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     }
 
     warn!("Ignoring unknown event {:?}", e);
-
     Ok(())
 }
 
@@ -275,7 +313,9 @@ fn register_metrics() -> PResult<()> {
     REGISTRY.register(Box::new(BATTERY.clone()))?;
     REGISTRY.register(Box::new(TEMPERATURE.clone()))?;
     REGISTRY.register(Box::new(PRESSURE.clone()))?;
-    REGISTRY.register(Box::new(HUMIDITY.clone()))
+    REGISTRY.register(Box::new(HUMIDITY.clone()))?;
+    REGISTRY.register(Box::new(LASTUPDATED.clone()))?;
+    REGISTRY.register(Box::new(LASTSEEN.clone()))
 }
 
 impl Sensor {
@@ -303,7 +343,7 @@ mod iso8601_without_seconds {
     use chrono::{DateTime, TimeZone, Utc};
     use serde::{self, Deserialize, Deserializer, Serializer};
 
-    const FORMAT: &'static str = "%Y-%m-%dT%H:%MZ";
+    const FORMAT: &str = "%Y-%m-%dT%H:%MZ";
 
     pub fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -355,9 +395,19 @@ mod test {
         register_metrics().unwrap();
         let mut state = State::default();
 
-        for event in events.lines().filter(|l| !l.trim().is_empty()) {
-            let mut e = serde_json::from_str::<Event>(event)
-                .unwrap_or_else(|err| panic!("Failed to parse event {}: {}", &event, err));
+        for (linum, event) in events
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| !line.trim().is_empty())
+        {
+            let mut e = serde_json::from_str::<Event>(event).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to parse event in line {} \nEvent: {} \nError: {}",
+                    linum + 1,
+                    &event,
+                    err
+                )
+            });
 
             process(&mut e, &mut state)
                 .unwrap_or_else(|err| panic!("Failed to process event {:?}: {}", &e, err));
