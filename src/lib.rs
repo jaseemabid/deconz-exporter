@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 use std::{collections::HashMap, error::Error};
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
