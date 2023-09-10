@@ -38,10 +38,10 @@ lazy_static! {
         &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
 
     static ref LASTUPDATED: GaugeVec = GaugeVec::new(opts!("sensor_last_updated_ms", "Duration since the sensor was last updated in ms"),
-        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+        &["manufacturername", "modelid", "name", "swversion"]).unwrap();
 
     static ref LASTSEEN: GaugeVec = GaugeVec::new(opts!("sensor_last_seen_ms", "Duration since the sensor was last seen in ms"),
-        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+        &["manufacturername", "modelid", "name", "swversion"]).unwrap();
 
 }
 
@@ -241,7 +241,7 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
             state.sensors.insert(e.id.to_string(), attr.clone());
 
             LASTSEEN
-                .with(&attr.labels(true))
+                .with(&attr.labels(false))
                 .set(attr.lastseen.timestamp_millis() as f64);
 
             return Ok(());
@@ -256,7 +256,7 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         debug!("Update state for sensor '{}': {:?}",  sensor.name, change);
 
 
-        LASTUPDATED.with(&sensor.labels(true))
+        LASTUPDATED.with(&sensor.labels(false))
             .set(change.lastupdated.timestamp_millis() as f64);
 
         if let Some(p) = change.pressure {
