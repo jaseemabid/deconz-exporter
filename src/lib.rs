@@ -1,5 +1,6 @@
 use std::{collections::HashMap, error::Error};
 
+use chrono::{DateTime, Utc};
 use prometheus::{labels, opts, GaugeVec, Registry, Result as PResult, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -70,8 +71,9 @@ pub struct Sensor {
     #[serde(default)]
     pub config: Option<SensorConfig>,
     pub etag: Option<String>,
-    pub lastannounced: Option<String>,
-    pub lastseen: Option<String>,
+    pub lastannounced: Option<DateTime<Utc>>,
+    #[serde(with = "iso8601_without_seconds")]
+    pub lastseen: DateTime<Utc>,
     pub manufacturername: String,
     pub modelid: String,
     pub name: String,
@@ -294,6 +296,33 @@ impl Sensor {
         .filter(|(name, _)| !name.is_empty())
         .map(|(name, value)| (name, value.as_str()))
         .collect()
+    }
+}
+
+mod iso8601_without_seconds {
+    use chrono::{DateTime, TimeZone, Utc};
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    const FORMAT: &'static str = "%Y-%m-%dT%H:%MZ";
+
+    pub fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = format!("{}", date.format(FORMAT));
+        serializer.serialize_str(&s)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        #[allow(deprecated)]
+        // DateTime::parse_from_str doesn't work with the custom format, so
+        // stick with these deprecated APIs for now.
+        Utc.datetime_from_str(&s, FORMAT)
+            .map_err(serde::de::Error::custom)
     }
 }
 
