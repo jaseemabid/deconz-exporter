@@ -237,7 +237,7 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     // now for future events with no attributes.
     if let Some(attr) = &e.attr {
         if e.type_ == "event" && e.event == "changed" {
-            debug!("Updating attrs for {}: {:?}", e.id, e.attr);
+            debug!("Updating attrs for {}: {:?}", e.id, attr);
             state.sensors.insert(e.id.to_string(), attr.clone());
 
             LASTSEEN
