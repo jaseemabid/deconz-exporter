@@ -1,6 +1,6 @@
 FROM rust:slim-bookworm
 
-RUN apt-get update && apt-get -y install libssl-dev pkg-config
+RUN apt update && apt install -y libssl-dev pkg-config && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /app
 WORKDIR /app
