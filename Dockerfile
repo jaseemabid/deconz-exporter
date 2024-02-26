@@ -1,4 +1,4 @@
-FROM rust:slim-bookworm
+FROM rustlang/rust:nightly-slim
 
 RUN apt update && apt install -y libssl-dev pkg-config && rm -rf /var/lib/apt/lists/*
 
@@ -8,5 +8,5 @@ ADD . .
 
 RUN cargo build
 
-ENTRYPOINT [ "cargo", "run", "--" ]
-CMD ["--url http://<gateway rest API>:4501", "--username 0E87CDA111", "--port 9199"]
+ENTRYPOINT [ "cargo", "run", "--"]
+CMD ["--url http://<deconz-ip>:<port>", "--username <username-from-setup>", "--port 9199"]
