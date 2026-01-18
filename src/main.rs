@@ -34,7 +34,9 @@ fn main() {
     let orig_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {
         // invoke the default handler and exit the process
-        info!("Something went terribly wrong and one of the threads panicked. Shutting down the main thread.");
+        info!(
+            "Something went terribly wrong and one of the threads panicked. Shutting down the main thread."
+        );
         orig_hook(panic_info);
         process::exit(1);
     }));

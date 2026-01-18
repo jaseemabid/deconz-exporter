@@ -1,7 +1,7 @@
 use std::{collections::HashMap, error::Error};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use prometheus::{labels, opts, GaugeVec, Registry, Result as PResult, TextEncoder};
+use prometheus::{GaugeVec, Registry, Result as PResult, TextEncoder, labels, opts};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
@@ -237,7 +237,10 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
 
     // Sensor attributes contains human friendly names and labels. Store them
     // now for future events with no attributes.
-    if let Some(attr) = &e.attr && e.type_ == "event" && e.event == "changed" {
+    if let Some(attr) = &e.attr
+        && e.type_ == "event"
+        && e.event == "changed"
+    {
         debug!("Updating attrs for {}: {:?}", e.id, attr);
         state.sensors.insert(e.id.to_string(), attr.clone());
 
@@ -249,14 +252,15 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     }
 
     // State often has 2 keys, `lastupdated` and another one that is the actual data. Handle those, ignore the rest
-    if let Some(change) = &e.state &&
-       let Some(sensor) = state.sensors.get(&e.id) &&
-       e.type_ == "event" && e.event == "changed" {
+    if let Some(change) = &e.state
+        && let Some(sensor) = state.sensors.get(&e.id)
+        && e.type_ == "event"
+        && e.event == "changed"
+    {
+        debug!("Update state for sensor '{}': {:?}", sensor.name, change);
 
-        debug!("Update state for sensor '{}': {:?}",  sensor.name, change);
-
-
-        LASTUPDATED.with(&sensor.labels(false))
+        LASTUPDATED
+            .with(&sensor.labels(false))
             .set(change.lastupdated.and_utc().timestamp_millis() as f64);
 
         if let Some(p) = change.pressure {
@@ -268,20 +272,29 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         if let Some(t) = change.temperature {
             TEMPERATURE
                 .with(&sensor.labels(true))
-                .set(if t.abs() > 100 { t as f64 / 100.0 } else { t as f64 });
+                .set(if t.abs() > 100 {
+                    t as f64 / 100.0
+                } else {
+                    t as f64
+                });
         }
 
         if let Some(h) = change.humidity {
-            HUMIDITY
-                .with(&sensor.labels(true))
-                .set(if h.abs() > 100 { h as f64 / 100.0 } else { h as f64 });
+            HUMIDITY.with(&sensor.labels(true)).set(if h.abs() > 100 {
+                h as f64 / 100.0
+            } else {
+                h as f64
+            });
         }
 
         return Ok(());
     }
 
     // Config change should be pretty much identical to state change
-    if let Some(config) = &e.config && e.type_ == "event" && e.event == "changed" {
+    if let Some(config) = &e.config
+        && e.type_ == "event"
+        && e.event == "changed"
+    {
         if let Some(s) = state.sensors.get(&e.id) {
             debug!(
                 "Updating battery for sensor '{}': {}",
