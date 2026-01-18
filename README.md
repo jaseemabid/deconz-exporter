@@ -38,15 +38,28 @@ deconz_temperature_celsius{manufacturername, modelid, name, swversion, type}
 2. Generate a new username for the exporter
 
    ```bash
-   $ curl -X POST -s http://<rest api endpoint>/api -d '{"devicetype": "deconz-exporter"}' | jq
+   $ curl -X POST -s http://192.168.1.100:4501/api -d '{"devicetype": "deconz-exporter"}' | jq
 
    [{"success":{"username":"0E87CDA111"}}]
    ```
 
+   Save the returned username as `DECONZ_API_USERNAME`.
+
 3. Start the exporter.
 
+   ### Using Docker
+
    ```bash
-   $ cargo run -- --url http://<gateway rest API>:4501 --username 0E87CDA111 --port 9199
+   docker run -p 9199:9199 \
+     -e DECONZ_API_URL=http://192.168.1.100:4501 \
+     -e DECONZ_API_USERNAME=0E87CDA111 \
+     ghcr.io/jaseemabid/deconz-exporter:latest
+   ```
+
+   ### Using Cargo
+
+   ```bash
+   cargo run -- --url $DECONZ_API_URL --username $DECONZ_API_USERNAME --port 9199
    ```
 
 4. Profit! 🥇
