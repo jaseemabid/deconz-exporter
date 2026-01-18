@@ -101,14 +101,14 @@ pub struct Sensor {
     // Timestamp of the last communication.
     #[serde(with = "iso8601_without_seconds")]
     pub lastseen: DateTime<Utc>,
-    pub manufacturername: String,
-    pub modelid: String,
-    pub name: String,
+    pub manufacturername: Option<String>,
+    pub modelid: Option<String>,
+    pub name: Option<String>,
     #[serde(default)]
     pub state: HashMap<String, Value>,
     pub swversion: Option<String>,
     #[serde(rename = "type")]
-    pub tipe: String,
+    pub tipe: Option<String>,
     pub uniqueid: String,
     #[serde(skip)]
     dummy: String,
@@ -257,7 +257,11 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         && e.type_ == "event"
         && e.event == "changed"
     {
-        debug!("Update state for sensor '{}': {:?}", sensor.name, change);
+        debug!(
+            "Update state for sensor '{}': {:?}",
+            sensor.name.as_deref().unwrap_or("unknown"),
+            change
+        );
 
         LASTUPDATED
             .with(&sensor.labels(false))
@@ -298,7 +302,8 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         if let Some(s) = state.sensors.get(&e.id) {
             debug!(
                 "Updating battery for sensor '{}': {}",
-                s.name, config.battery
+                s.name.as_deref().unwrap_or("unknown"),
+                config.battery
             );
             BATTERY.with(&s.labels(false)).set(config.battery);
         } else {
@@ -334,12 +339,15 @@ impl Sensor {
     /// Convert sensor into prometheus labels
     fn labels(&self, tipe: bool) -> HashMap<&str, &str> {
         vec![
-            ("manufacturername", &self.manufacturername),
-            ("modelid", &self.modelid),
-            ("name", &self.name),
+            (
+                "manufacturername",
+                self.manufacturername.as_ref().unwrap_or(&self.dummy),
+            ),
+            ("modelid", self.modelid.as_ref().unwrap_or(&self.dummy)),
+            ("name", self.name.as_ref().unwrap_or(&self.dummy)),
             ("swversion", self.swversion.as_ref().unwrap_or(&self.dummy)),
             if tipe {
-                ("type", &self.tipe)
+                ("type", self.tipe.as_ref().unwrap_or(&self.dummy))
             } else {
                 ("", &self.dummy)
             },
