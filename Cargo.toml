@@ -1,7 +1,8 @@
 [package]
 name = "deconz-exporter"
 description = "A very simple (and naive) Prometheus exporter for deCONZ Phoscon zigbee gateway"
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 version = "0.1.0"
 license = "MIT"
 authors = ["Jaseem Abid <me@jabid.in>"]

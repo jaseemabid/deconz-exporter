@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 use std::{collections::HashMap, error::Error};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -235,17 +233,15 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
 
     // Sensor attributes contains human friendly names and labels. Store them
     // now for future events with no attributes.
-    if let Some(attr) = &e.attr {
-        if e.type_ == "event" && e.event == "changed" {
-            debug!("Updating attrs for {}: {:?}", e.id, attr);
-            state.sensors.insert(e.id.to_string(), attr.clone());
+    if let Some(attr) = &e.attr && e.type_ == "event" && e.event == "changed" {
+        debug!("Updating attrs for {}: {:?}", e.id, attr);
+        state.sensors.insert(e.id.to_string(), attr.clone());
 
-            LASTSEEN
-                .with(&attr.labels(false))
-                .set(attr.lastseen.timestamp_millis() as f64);
+        LASTSEEN
+            .with(&attr.labels(false))
+            .set(attr.lastseen.timestamp_millis() as f64);
 
-            return Ok(());
-        }
+        return Ok(());
     }
 
     // State often has 2 keys, `lastupdated` and another one that is the actual data. Handle those, ignore the rest
@@ -257,7 +253,7 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
 
 
         LASTUPDATED.with(&sensor.labels(false))
-            .set(change.lastupdated.timestamp_millis() as f64);
+            .set(change.lastupdated.and_utc().timestamp_millis() as f64);
 
         if let Some(p) = change.pressure {
             PRESSURE.with(&sensor.labels(true)).set(p as f64);
@@ -281,19 +277,17 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
     }
 
     // Config change should be pretty much identical to state change
-    if let Some(config) = &e.config {
-        if e.type_ == "event" && e.event == "changed" {
-            if let Some(s) = state.sensors.get(&e.id) {
-                debug!(
-                    "Updating battery for sensor '{}': {}",
-                    s.name, config.battery
-                );
-                BATTERY.with(&s.labels(false)).set(config.battery);
-            } else {
-                warn!("Unknown config change, ignoring it: {:?}", config)
-            }
-            return Ok(());
+    if let Some(config) = &e.config && e.type_ == "event" && e.event == "changed" {
+        if let Some(s) = state.sensors.get(&e.id) {
+            debug!(
+                "Updating battery for sensor '{}': {}",
+                s.name, config.battery
+            );
+            BATTERY.with(&s.labels(false)).set(config.battery);
+        } else {
+            warn!("Unknown config change, ignoring it: {:?}", config)
         }
+        return Ok(());
     }
 
     warn!("Ignoring unknown event {:?}", e);
