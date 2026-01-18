@@ -1,12 +1,22 @@
-FROM rustlang/rust:nightly-slim
+# Build stage
+FROM rust:slim AS builder
 
 RUN apt update && apt install -y libssl-dev pkg-config && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir /app
 WORKDIR /app
-ADD . .
+COPY . .
 
-RUN cargo build
+RUN cargo build --release
 
-ENTRYPOINT [ "cargo", "run", "--"]
-CMD ["--url http://<deconz-ip>:<port>", "--username <username-from-setup>", "--port 9199"]
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt update && apt install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/deconz-exporter /usr/local/bin/deconz-exporter
+
+ENV DECONZ_API_URL=""
+ENV DECONZ_API_USERNAME=""
+
+ENTRYPOINT ["deconz-exporter"]
+CMD ["--url", "${DECONZ_API_URL}", "--username", "${DECONZ_API_USERNAME}", "--port", "9199"]
