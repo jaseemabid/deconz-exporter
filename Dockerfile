@@ -17,6 +17,7 @@ COPY --from=builder /app/target/release/deconz-exporter /usr/local/bin/deconz-ex
 
 ENV DECONZ_API_URL=""
 ENV DECONZ_API_USERNAME=""
+ENV DECONZ_WS_URL=""
+ENV DECONZ_PORT="9199"
 
 ENTRYPOINT ["deconz-exporter"]
-CMD ["--url", "${DECONZ_API_URL}", "--username", "${DECONZ_API_USERNAME}", "--port", "9199"]

@@ -10,15 +10,19 @@ use deconz_exporter::{metrics, run};
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// deCONZ API server url
-    #[clap(long, parse(try_from_str = Url::parse))]
-    url: Url,
+    #[clap(long, env = "DECONZ_API_URL", parse(try_from_str = Url::parse))]
+    api_url: Url,
+
+    /// Optional websocket URL override
+    #[clap(long, env = "DECONZ_WS_URL")]
+    ws_url: Option<String>,
 
     /// deCONZ API username
-    #[clap(long)]
+    #[clap(long, env = "DECONZ_API_USERNAME")]
     username: String,
 
     /// Port to listen for metrics
-    #[clap(short, long, default_value_t = 8000)]
+    #[clap(short, long, env = "DECONZ_PORT", default_value_t = 8000)]
     port: u16,
 }
 
@@ -41,8 +45,19 @@ fn main() {
         process::exit(1);
     }));
 
+    let ws_url = match args.ws_url.as_deref() {
+        Some(value) if !value.is_empty() => match Url::parse(value) {
+            Ok(url) => Some(url),
+            Err(err) => {
+                eprintln!("Invalid websocket URL in --ws-url/DECONZ_WS_URL: {}", err);
+                process::exit(2);
+            }
+        },
+        _ => None,
+    };
+
     thread::spawn(move || {
-        run(&args.url, &args.username).unwrap();
+        run(&args.api_url, ws_url.as_ref(), &args.username).unwrap();
     });
 
     let server = Server::http(format!("0.0.0.0:{}", args.port)).unwrap();

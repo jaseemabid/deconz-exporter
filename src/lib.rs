@@ -192,8 +192,14 @@ fn websocket(host: &Url, username: &str) -> Result<Url, Box<dyn Error>> {
 }
 
 /// Run listener for websocket events.
-pub fn run(host: &Url, username: &str) -> Result<(), Box<dyn Error>> {
-    let socket = websocket(host, username)?;
+pub fn run(api_url: &Url, ws_url: Option<&Url>, username: &str) -> Result<(), Box<dyn Error>> {
+    let socket = match ws_url {
+        Some(url) => {
+            info!("Using websocket URL override: {}", url);
+            url.clone()
+        }
+        None => websocket(api_url, username)?,
+    };
     register_metrics()?;
     stream(&socket, &mut State::default(), process)
 }

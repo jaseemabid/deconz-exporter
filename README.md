@@ -35,34 +35,59 @@ deconz_temperature_celsius{manufacturername, modelid, name, swversion, type}
 
    ![Enable discovery](./discovery.png)
 
-2. Generate a new username for the exporter
+1. Generate a new username for the exporter
 
    ```bash
-   $ curl -X POST -s http://192.168.1.100:4501/api -d '{"devicetype": "deconz-exporter"}' | jq
+   $ curl -X POST -s http://deconz:4501/api -d '{"devicetype": "deconz-exporter"}' | jq
 
    [{"success":{"username":"0E87CDA111"}}]
    ```
 
    Save the returned username as `DECONZ_API_USERNAME`.
 
-3. Start the exporter.
+1. Start the exporter.
 
    ### Using Docker
 
    ```bash
    docker run -p 9199:9199 \
-     -e DECONZ_API_URL=http://192.168.1.100:4501 \
+     -e DECONZ_API_URL=http://deconz:4501 \
      -e DECONZ_API_USERNAME=0E87CDA111 \
+     -e DECONZ_PORT=9199 \
+     ghcr.io/jaseemabid/deconz-exporter:latest
+
+   # Optional: override websocket URL
+   docker run -p 9199:9199 \
+     -e DECONZ_API_URL=http://deconz:4501 \
+     -e DECONZ_API_USERNAME=0E87CDA111 \
+     -e DECONZ_WS_URL=ws://deconz:4502 \
+     -e DECONZ_PORT=9199 \
      ghcr.io/jaseemabid/deconz-exporter:latest
    ```
 
    ### Using Cargo
 
    ```bash
-   cargo run -- --url $DECONZ_API_URL --username $DECONZ_API_USERNAME --port 9199
+   # Using flags
+   cargo run -- --api-url $DECONZ_API_URL --username $DECONZ_API_USERNAME --port 9199
+   # Optional: override websocket URL
+   cargo run -- --api-url $DECONZ_API_URL --username $DECONZ_API_USERNAME --ws-url ws://deconz:4502 --port 9199
+
+   # Using env vars (supported by clap)
+   DECONZ_API_URL=http://deconz:4501 \
+   DECONZ_API_USERNAME=0E87CDA111 \
+   DECONZ_WS_URL=ws://deconz:4502 \
+   DECONZ_PORT=9199 \
+   cargo run
    ```
 
-4. Profit! 🥇
+1. Optionally override websocket url.
+
+The exporter will try to discover the websocket url by default from the API url,
+but use `--ws-url ws://deconz:4502` or `DECONZ_WS_URL=ws://deconz:4502` if you
+need to explicitly use a different url.
+
+5. Profit! 🥇
 
 ## ⚙️ How does this work?
 
@@ -81,7 +106,7 @@ deconz_temperature_celsius{manufacturername, modelid, name, swversion, type}
    {"attr":{"id":"1","lastannounced":null,"lastseen":"2022-03-04T22:42Z","manufacturername":"dresden elektronik","modelid":...
    ```
 
-2. Run `$ cargo test` just to be sure.
+1. Run `$ cargo test` just to be sure.
 
 ## 📝 Notes
 
