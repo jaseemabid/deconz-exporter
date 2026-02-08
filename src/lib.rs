@@ -66,10 +66,14 @@ pub struct Gateway {
 /// Present only for "ZHA{Humidity, Pressure, Switch, Temperature}, null for "Configuration tool"
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct SensorConfig {
-    pub battery: f64,
-    pub offset: f64,
-    pub on: bool,
-    pub reachable: bool,
+    #[serde(default)]
+    pub battery: Option<f64>,
+    #[serde(default)]
+    pub offset: Option<f64>,
+    #[serde(default)]
+    pub on: Option<bool>,
+    #[serde(default)]
+    pub reachable: Option<bool>,
 }
 
 // State change
@@ -99,8 +103,8 @@ pub struct Sensor {
     // Timestamp of the last power-cycle or rejoin.
     pub lastannounced: Option<DateTime<Utc>>,
     // Timestamp of the last communication.
-    #[serde(with = "iso8601_without_seconds")]
-    pub lastseen: DateTime<Utc>,
+    #[serde(default, with = "option_iso8601_without_seconds")]
+    pub lastseen: Option<DateTime<Utc>>,
     pub manufacturername: Option<String>,
     pub modelid: Option<String>,
     pub name: Option<String>,
@@ -109,7 +113,7 @@ pub struct Sensor {
     pub swversion: Option<String>,
     #[serde(rename = "type")]
     pub tipe: Option<String>,
-    pub uniqueid: String,
+    pub uniqueid: Option<String>,
     #[serde(skip)]
     dummy: String,
 }
@@ -137,7 +141,8 @@ pub struct Event {
     // The id of the resource to which the message relates
     pub id: String,
     // The uniqueid of the resource to which the message relates
-    pub uniqueid: String,
+    #[serde(default)]
+    pub uniqueid: Option<String>,
     // The group id of the resource to which the message relates.
     pub gid: Option<String>,
     // The scene id of the resource to which the message relates.
@@ -175,6 +180,14 @@ fn gateway(host: &Url, username: &str) -> Result<Gateway, reqwest::Error> {
     reqwest::blocking::get(host)?.json()
 }
 
+/// Read sensors map from deCONZ REST API
+fn sensors(host: &Url, username: &str) -> Result<HashMap<String, Sensor>, reqwest::Error> {
+    let mut host = host.clone();
+    host.set_path(&format!("/api/{}/sensors", username));
+    info!("Fetching sensors from {host}");
+    reqwest::blocking::get(host)?.json()
+}
+
 /// Discover websocket port from gateway config
 fn websocket(host: &Url, username: &str) -> Result<Url, Box<dyn Error>> {
     let gw = gateway(host, username)?;
@@ -201,7 +214,15 @@ pub fn run(api_url: &Url, ws_url: Option<&Url>, username: &str) -> Result<(), Bo
         None => websocket(api_url, username)?,
     };
     register_metrics()?;
-    stream(&socket, &mut State::default(), process)
+    let mut state = State::default();
+    match sensors(api_url, username) {
+        Ok(s) => {
+            info!("Loaded {} sensors from REST API", s.len());
+            state.sensors = s;
+        }
+        Err(err) => warn!("Failed to load sensors from REST API: {}", err),
+    }
+    stream(&socket, &mut state, process)
 }
 
 /// Run a callback for each event received over websocket.
@@ -248,11 +269,17 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         && e.event == "changed"
     {
         debug!("Updating attrs for {}: {:?}", e.id, attr);
-        state.sensors.insert(e.id.to_string(), attr.clone());
+        let entry = state
+            .sensors
+            .entry(e.id.to_string())
+            .or_insert_with(|| attr.clone());
+        entry.merge_from(attr);
 
-        LASTSEEN
-            .with(&attr.labels(false))
-            .set(attr.lastseen.timestamp_millis() as f64);
+        if let Some(lastseen) = entry.lastseen.as_ref() {
+            LASTSEEN
+                .with(&entry.labels(false))
+                .set(lastseen.timestamp_millis() as f64);
+        }
 
         return Ok(());
     }
@@ -306,12 +333,14 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         && e.event == "changed"
     {
         if let Some(s) = state.sensors.get(&e.id) {
-            debug!(
-                "Updating battery for sensor '{}': {}",
-                s.name.as_deref().unwrap_or("unknown"),
-                config.battery
-            );
-            BATTERY.with(&s.labels(false)).set(config.battery);
+            if let Some(battery) = config.battery {
+                debug!(
+                    "Updating battery for sensor '{}': {}",
+                    s.name.as_deref().unwrap_or("unknown"),
+                    battery
+                );
+                BATTERY.with(&s.labels(false)).set(battery);
+            }
         } else {
             warn!("Unknown config change, ignoring it: {:?}", config)
         }
@@ -363,32 +392,78 @@ impl Sensor {
         .map(|(name, value)| (name, value.as_str()))
         .collect()
     }
+
+    fn merge_from(&mut self, other: &Sensor) {
+        if other.config.is_some() {
+            self.config = other.config.clone();
+        }
+        if other.etag.is_some() {
+            self.etag = other.etag.clone();
+        }
+        if other.lastannounced.is_some() {
+            self.lastannounced = other.lastannounced;
+        }
+        if other.lastseen.is_some() {
+            self.lastseen = other.lastseen;
+        }
+        if other.manufacturername.is_some() {
+            self.manufacturername = other.manufacturername.clone();
+        }
+        if other.modelid.is_some() {
+            self.modelid = other.modelid.clone();
+        }
+        if other.name.is_some() {
+            self.name = other.name.clone();
+        }
+        if !other.state.is_empty() {
+            self.state = other.state.clone();
+        }
+        if other.swversion.is_some() {
+            self.swversion = other.swversion.clone();
+        }
+        if other.tipe.is_some() {
+            self.tipe = other.tipe.clone();
+        }
+        if other.uniqueid.is_some() {
+            self.uniqueid = other.uniqueid.clone();
+        }
+    }
 }
 
-mod iso8601_without_seconds {
+mod option_iso8601_without_seconds {
     use chrono::{DateTime, TimeZone, Utc};
     use serde::{self, Deserialize, Deserializer, Serializer};
 
     const FORMAT: &str = "%Y-%m-%dT%H:%MZ";
 
-    pub fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(date: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let s = format!("{}", date.format(FORMAT));
-        serializer.serialize_str(&s)
+        match date {
+            Some(date) => {
+                let s = format!("{}", date.format(FORMAT));
+                serializer.serialize_str(&s)
+            }
+            None => serializer.serialize_none(),
+        }
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        #[allow(deprecated)]
-        // DateTime::parse_from_str doesn't work with the custom format, so
-        // stick with these deprecated APIs for now.
-        Utc.datetime_from_str(&s, FORMAT)
-            .map_err(serde::de::Error::custom)
+        let s = Option::<String>::deserialize(deserializer)?;
+        match s {
+            Some(s) =>
+            {
+                #[allow(deprecated)]
+                Utc.datetime_from_str(&s, FORMAT)
+                    .map(Some)
+                    .map_err(serde::de::Error::custom)
+            }
+            None => Ok(None),
+        }
     }
 }
 
