@@ -431,7 +431,7 @@ impl Sensor {
 }
 
 mod option_iso8601_without_seconds {
-    use chrono::{DateTime, TimeZone, Utc};
+    use chrono::{DateTime, NaiveDateTime, Utc};
     use serde::{self, Deserialize, Deserializer, Serializer};
 
     const FORMAT: &str = "%Y-%m-%dT%H:%MZ";
@@ -455,13 +455,10 @@ mod option_iso8601_without_seconds {
     {
         let s = Option::<String>::deserialize(deserializer)?;
         match s {
-            Some(s) =>
-            {
-                #[allow(deprecated)]
-                Utc.datetime_from_str(&s, FORMAT)
-                    .map(Some)
-                    .map_err(serde::de::Error::custom)
-            }
+            Some(s) => NaiveDateTime::parse_from_str(&s, FORMAT)
+                .map(|dt| dt.and_utc())
+                .map(Some)
+                .map_err(serde::de::Error::custom),
             None => Ok(None),
         }
     }
