@@ -7,22 +7,22 @@ use url::Url;
 use deconz_exporter::{metrics, run};
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None)]
 struct Args {
     /// deCONZ API server url
-    #[clap(long, env = "DECONZ_API_URL", parse(try_from_str = Url::parse))]
+    #[arg(long, env = "DECONZ_API_URL", value_parser = Url::parse)]
     api_url: Url,
 
     /// Optional websocket URL override
-    #[clap(long, env = "DECONZ_WS_URL")]
+    #[arg(long, env = "DECONZ_WS_URL")]
     ws_url: Option<String>,
 
     /// deCONZ API username
-    #[clap(long, env = "DECONZ_API_USERNAME")]
+    #[arg(long, env = "DECONZ_API_USERNAME")]
     username: String,
 
     /// Port to listen for metrics
-    #[clap(short, long, env = "DECONZ_PORT", default_value_t = 8000)]
+    #[arg(short, long, env = "DECONZ_PORT", default_value_t = 8000)]
     port: u16,
 }
 
