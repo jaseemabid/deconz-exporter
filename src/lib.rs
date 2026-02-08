@@ -492,9 +492,17 @@ mod test {
 
     #[test]
     fn test_process() {
-        let events = include_str!("../events.json");
+        let expected_metrics = include_str!("../data/metrics.txt")
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>();
+        let devices = include_str!("../data/devices.json");
+        let events = include_str!("../data/events.json");
         register_metrics().unwrap();
-        let mut state = State::default();
+        let mut state = State {
+            sensors: serde_json::from_str::<HashMap<String, Sensor>>(devices)
+                .expect("Failed to parse devices.json"),
+        };
 
         for (linum, event) in events
             .lines()
@@ -523,6 +531,18 @@ mod test {
 
         dbg!(&m);
 
-        assert!(m.len() > 10, "Too few metrics exported")
+        assert!(
+            m.len() >= expected_metrics.len(),
+            "Too few metrics exported: {} < {}",
+            m.len(),
+            expected_metrics.len()
+        );
+
+        for expected in expected_metrics {
+            assert!(
+                m.iter().any(|line| line == &expected),
+                "Missing metric: {expected}"
+            );
+        }
     }
 }

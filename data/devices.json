@@ -1,0 +1,337 @@
+{
+  "1": {
+    "config": {
+      "configured": true,
+      "on": true,
+      "sunriseoffset": 30,
+      "sunsetoffset": -30
+    },
+    "etag": "5f81f5ab70bd84d217d56911bd32bcc4",
+    "manufacturername": "Philips",
+    "modelid": "PHDL00",
+    "name": "Daylight",
+    "state": {
+      "dark": true,
+      "daylight": false,
+      "lastupdated": "2026-02-08T17:38:11.303",
+      "status": 210,
+      "sunrise": "2026-02-08T07:28:53",
+      "sunset": "2026-02-08T17:02:41"
+    },
+    "swversion": "1.0",
+    "type": "Daylight",
+    "uniqueid": "00:21:2e:ff:ff:07:d2:5d-01"
+  },
+  "10": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "dee1881990157052bd5c9af840e089f6",
+    "lastannounced": "2026-01-18T17:23:56Z",
+    "lastseen": "2026-02-08T17:28Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Bedroom",
+    "nwkaddress": "0xBE0F",
+    "state": {
+      "lastupdated": "2026-02-08T17:28:59.536",
+      "pressure": 998
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHAPressure",
+    "uniqueid": "00:15:8d:00:07:e0:83:5b-01-0403"
+  },
+  "11": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "cc84cba38dc7e2ad70744240355b1b27",
+    "lastannounced": "2026-02-06T08:06:32Z",
+    "lastseen": "2026-02-08T17:15Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Balcony",
+    "nwkaddress": "0xD931",
+    "state": {
+      "lastupdated": "2026-02-08T17:15:31.561",
+      "temperature": 987
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHATemperature",
+    "uniqueid": "00:15:8d:00:07:df:a1:52-01-0402"
+  },
+  "12": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "ab77474c2d5c6476afed8cd9dc1f2b9b",
+    "lastannounced": "2026-02-06T08:06:32Z",
+    "lastseen": "2026-02-08T17:15Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Balcony",
+    "nwkaddress": "0xD931",
+    "state": {
+      "humidity": 8001,
+      "lastupdated": "2026-02-08T17:15:31.572"
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHAHumidity",
+    "uniqueid": "00:15:8d:00:07:df:a1:52-01-0405"
+  },
+  "13": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "178678379765ec5f6841f028bd53ca5a",
+    "lastannounced": "2026-02-06T08:06:32Z",
+    "lastseen": "2026-02-08T17:15Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Balcony",
+    "nwkaddress": "0xD931",
+    "state": {
+      "lastupdated": "2026-02-08T17:15:31.577",
+      "pressure": 998
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHAPressure",
+    "uniqueid": "00:15:8d:00:07:df:a1:52-01-0403"
+  },
+  "2": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "9c94c1ab137b8a7475f7db49e76c694c",
+    "lastannounced": "2026-01-18T17:02:47Z",
+    "lastseen": "2026-02-08T17:19Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Living Room",
+    "nwkaddress": "0xF34A",
+    "state": {
+      "lastupdated": "2026-02-08T17:19:56.393",
+      "temperature": 1996
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHATemperature",
+    "uniqueid": "00:15:8d:00:07:e0:ac:42-01-0402"
+  },
+  "3": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "ab0230ab1b697ec36b9204f4874a3d38",
+    "lastannounced": "2026-01-18T17:02:47Z",
+    "lastseen": "2026-02-08T17:19Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Living Room",
+    "nwkaddress": "0xF34A",
+    "state": {
+      "humidity": 5661,
+      "lastupdated": "2026-02-08T17:19:56.403"
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHAHumidity",
+    "uniqueid": "00:15:8d:00:07:e0:ac:42-01-0405"
+  },
+  "4": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "afce5953962f53998eb00418327116b9",
+    "lastannounced": "2026-01-18T17:02:47Z",
+    "lastseen": "2026-02-08T17:19Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Living Room",
+    "nwkaddress": "0xF34A",
+    "state": {
+      "lastupdated": "2026-02-08T17:19:56.408",
+      "pressure": 996
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHAPressure",
+    "uniqueid": "00:15:8d:00:07:e0:ac:42-01-0403"
+  },
+  "5": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "e3f17d58c2408b0ab6e9659f0c8d8dc6",
+    "lastannounced": "2026-01-18T17:06:12Z",
+    "lastseen": "2026-02-08T17:19Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Office",
+    "nwkaddress": "0x1A0F",
+    "state": {
+      "lastupdated": "2026-02-08T17:19:08.999",
+      "temperature": 2105
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHATemperature",
+    "uniqueid": "00:15:8d:00:07:e0:a8:15-01-0402"
+  },
+  "6": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "de3746f372ad2e8983ab23fbfa1bd5bb",
+    "lastannounced": "2026-01-18T17:06:12Z",
+    "lastseen": "2026-02-08T17:19Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Office",
+    "nwkaddress": "0x1A0F",
+    "state": {
+      "humidity": 5460,
+      "lastupdated": "2026-02-08T17:19:09.011"
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHAHumidity",
+    "uniqueid": "00:15:8d:00:07:e0:a8:15-01-0405"
+  },
+  "7": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "99753977823fabe9993ae6641266b078",
+    "lastannounced": "2026-01-18T17:06:12Z",
+    "lastseen": "2026-02-08T17:19Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Office",
+    "nwkaddress": "0x1A0F",
+    "state": {
+      "lastupdated": "2026-02-08T17:19:09.016",
+      "pressure": 997
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHAPressure",
+    "uniqueid": "00:15:8d:00:07:e0:a8:15-01-0403"
+  },
+  "8": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "0aceb99fc971c6aa47b04169df18e0c3",
+    "lastannounced": "2026-01-18T17:23:56Z",
+    "lastseen": "2026-02-08T17:28Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Bedroom",
+    "nwkaddress": "0xBE0F",
+    "state": {
+      "lastupdated": "2026-02-08T17:28:59.536",
+      "temperature": 2040
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHATemperature",
+    "uniqueid": "00:15:8d:00:07:e0:83:5b-01-0402"
+  },
+  "9": {
+    "capabilities": {
+      "sleeper": true
+    },
+    "config": {
+      "battery": 100,
+      "offset": 0,
+      "on": true,
+      "reachable": true
+    },
+    "ep": 1,
+    "etag": "dee1881990157052bd5c9af840e089f6",
+    "lastannounced": "2026-01-18T17:23:56Z",
+    "lastseen": "2026-02-08T17:28Z",
+    "manufacturername": "LUMI",
+    "modelid": "lumi.weather",
+    "name": "Bedroom",
+    "nwkaddress": "0xBE0F",
+    "state": {
+      "humidity": 5556,
+      "lastupdated": "2026-02-08T17:28:59.536"
+    },
+    "swversion": "0.0.0_0005",
+    "type": "ZHAHumidity",
+    "uniqueid": "00:15:8d:00:07:e0:83:5b-01-0405"
+  }
+}
