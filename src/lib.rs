@@ -234,7 +234,7 @@ fn stream(url: &Url, state: &mut State, callback: Callback) -> Result<(), Box<dy
 
     let (mut socket, _) = tungstenite::client::connect(url)?;
     loop {
-        let msg_text = socket.read_message()?.to_text()?.to_string();
+        let msg_text = socket.read()?.to_text()?.to_string();
         match serde_json::from_str::<Event>(&msg_text) {
             Ok(mut event) => {
                 // Failing to process a single event is alright, and this process should just continue. Non recoverable
