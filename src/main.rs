@@ -24,6 +24,10 @@ struct Args {
     /// Port to listen for metrics
     #[arg(short, long, env = "DECONZ_PORT", default_value_t = 8000)]
     port: u16,
+
+    /// Write raw websocket events to this JSONL file
+    #[arg(long, env = "DECONZ_EVENTS_FILE")]
+    events_file: Option<String>,
 }
 
 fn main() {
@@ -57,7 +61,13 @@ fn main() {
     };
 
     thread::spawn(move || {
-        run(&args.api_url, ws_url.as_ref(), &args.username).unwrap();
+        run(
+            &args.api_url,
+            ws_url.as_ref(),
+            &args.username,
+            args.events_file.as_deref(),
+        )
+        .unwrap();
     });
 
     let server = Server::http(format!("0.0.0.0:{}", args.port)).unwrap();

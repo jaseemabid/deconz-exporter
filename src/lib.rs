@@ -1,4 +1,9 @@
-use std::{collections::HashMap, error::Error};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs::{File, OpenOptions},
+    io::{BufWriter, Write},
+};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use prometheus::{GaugeVec, Registry, Result as PResult, TextEncoder, labels, opts};
@@ -205,7 +210,12 @@ fn websocket(host: &Url, username: &str) -> Result<Url, Box<dyn Error>> {
 }
 
 /// Run listener for websocket events.
-pub fn run(api_url: &Url, ws_url: Option<&Url>, username: &str) -> Result<(), Box<dyn Error>> {
+pub fn run(
+    api_url: &Url,
+    ws_url: Option<&Url>,
+    username: &str,
+    events_file: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
     let socket = match ws_url {
         Some(url) => {
             info!("Using websocket URL override: {}", url);
@@ -214,6 +224,14 @@ pub fn run(api_url: &Url, ws_url: Option<&Url>, username: &str) -> Result<(), Bo
         None => websocket(api_url, username)?,
     };
     register_metrics()?;
+    let mut writer = match events_file {
+        Some(path) => {
+            info!("Writing events to {}", path);
+            let file = OpenOptions::new().create(true).append(true).open(path)?;
+            Some(BufWriter::new(file))
+        }
+        None => None,
+    };
     let mut state = State::default();
     match sensors(api_url, username) {
         Ok(s) => {
@@ -222,19 +240,28 @@ pub fn run(api_url: &Url, ws_url: Option<&Url>, username: &str) -> Result<(), Bo
         }
         Err(err) => warn!("Failed to load sensors from REST API: {}", err),
     }
-    stream(&socket, &mut state, process)
+    stream(&socket, &mut state, process, &mut writer)
 }
 
 /// Run a callback for each event received over websocket.
 //
 // NOTE: A stream of Events would have been much neater than a callback, but Rust makes that API significantly more
 // painful to implement.  Revisit this later.
-fn stream(url: &Url, state: &mut State, callback: Callback) -> Result<(), Box<dyn Error>> {
+fn stream(
+    url: &Url,
+    state: &mut State,
+    callback: Callback,
+    writer: &mut Option<BufWriter<File>>,
+) -> Result<(), Box<dyn Error>> {
     info!("🔌 Start listening for websocket events at {url}");
 
     let (mut socket, _) = tungstenite::client::connect(url)?;
     loop {
         let msg_text = socket.read()?.to_text()?.to_string();
+        if let Some(w) = writer.as_mut() {
+            writeln!(w, "{}", msg_text)?;
+            w.flush()?;
+        }
         match serde_json::from_str::<Event>(&msg_text) {
             Ok(mut event) => {
                 // Failing to process a single event is alright, and this process should just continue. Non recoverable

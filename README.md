@@ -63,6 +63,14 @@ deconz_temperature_celsius{manufacturername, modelid, name, swversion, type}
      -e DECONZ_WS_URL=ws://deconz:4502 \
      -e DECONZ_PORT=9199 \
      ghcr.io/jaseemabid/deconz-exporter:latest
+
+   # Optional: archive raw websocket events to a JSONL file
+   docker run -p 9199:9199 \
+     -e DECONZ_API_URL=http://deconz:4501 \
+     -e DECONZ_API_USERNAME=0E87CDA111 \
+     -e DECONZ_EVENTS_FILE=/data/events.jsonl \
+     -v /path/to/host/dir:/data \
+     ghcr.io/jaseemabid/deconz-exporter:latest
    ```
 
    ### Using Cargo
@@ -79,13 +87,22 @@ deconz_temperature_celsius{manufacturername, modelid, name, swversion, type}
    DECONZ_WS_URL=ws://deconz:4502 \
    DECONZ_PORT=9199 \
    cargo run
+
+   # Optional: archive raw websocket events to a JSONL file
+   cargo run -- --api-url $DECONZ_API_URL --username $DECONZ_API_USERNAME --events-file /tmp/events.jsonl
    ```
 
 1. Optionally override websocket url.
 
-The exporter will try to discover the websocket url by default from the API url,
-but use `--ws-url ws://deconz:4502` or `DECONZ_WS_URL=ws://deconz:4502` if you
-need to explicitly use a different url.
+   The exporter will try to discover the websocket url by default from the API url,
+   but use `--ws-url ws://deconz:4502` or `DECONZ_WS_URL=ws://deconz:4502` if you
+   need to explicitly use a different url.
+
+1. Optionally archive raw events.
+
+   Use `--events-file /path/to/events.jsonl` or `DECONZ_EVENTS_FILE=/path/to/events.jsonl`
+   to write every raw websocket event to a [JSONL] file (one JSON object per line).
+   The file is opened in append mode, so events accumulate across restarts.
 
 5. Profit! 🥇
 
@@ -127,4 +144,5 @@ need to explicitly use a different url.
 [deconz rest api]: https://dresden-elektronik.github.io/deconz-rest-doc
 [phoscon]: https://phoscon.de/en/conbee2/software#phoscon-app
 [websocat]: https://github.com/vi/websocat
+[jsonl]: https://jsonlines.org
 [websocket api]: https://dresden-elektronik.github.io/deconz-rest-doc/endpoints/websocket
