@@ -29,22 +29,22 @@ lazy_static! {
         &["name", "apiversion"]).unwrap();
 
     static ref BATTERY: GaugeVec = GaugeVec::new(opts!("battery", "Battery level in percentage"),
-        &["manufacturername", "modelid", "name", "swversion"]).unwrap();
+        &["id", "manufacturername", "modelid", "name", "swversion"]).unwrap();
 
     static ref TEMPERATURE: GaugeVec = GaugeVec::new(opts!("temperature_celsius", "Temperature in degree Celsius"),
-        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+        &["id", "manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
 
     static ref PRESSURE: GaugeVec = GaugeVec::new(opts!("pressure_hpa", "Pressure in hPa"),
-        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+        &["id", "manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
 
     static ref HUMIDITY: GaugeVec = GaugeVec::new(opts!("humidity_ratio", "Relative humidity in percentage"),
-        &["manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
+        &["id", "manufacturername", "modelid", "name", "swversion", "type"]).unwrap();
 
     static ref LASTUPDATED: GaugeVec = GaugeVec::new(opts!("sensor_last_updated_ms", "Duration since the sensor was last updated in ms"),
-        &["manufacturername", "modelid", "name", "swversion"]).unwrap();
+        &["id", "manufacturername", "modelid", "name", "swversion"]).unwrap();
 
     static ref LASTSEEN: GaugeVec = GaugeVec::new(opts!("sensor_last_seen_ms", "Duration since the sensor was last seen in ms"),
-        &["manufacturername", "modelid", "name", "swversion"]).unwrap();
+        &["id", "manufacturername", "modelid", "name", "swversion"]).unwrap();
 
 }
 
@@ -304,7 +304,7 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
 
         if let Some(lastseen) = entry.lastseen.as_ref() {
             LASTSEEN
-                .with(&entry.labels(false))
+                .with(&entry.labels(&e.id, false))
                 .set(lastseen.timestamp_millis() as f64);
         }
 
@@ -324,18 +324,18 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         );
 
         LASTUPDATED
-            .with(&sensor.labels(false))
+            .with(&sensor.labels(&e.id, false))
             .set(change.lastupdated.and_utc().timestamp_millis() as f64);
 
         if let Some(p) = change.pressure {
-            PRESSURE.with(&sensor.labels(true)).set(p as f64);
+            PRESSURE.with(&sensor.labels(&e.id, true)).set(p as f64);
         }
 
         // Xiomi Aqara sensors report the temperature as 2134 instead of
         // 21.34°C. Same for humidity. Scale it down.
         if let Some(t) = change.temperature {
             TEMPERATURE
-                .with(&sensor.labels(true))
+                .with(&sensor.labels(&e.id, true))
                 .set(if t.abs() > 100 {
                     t as f64 / 100.0
                 } else {
@@ -344,7 +344,7 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         }
 
         if let Some(h) = change.humidity {
-            HUMIDITY.with(&sensor.labels(true)).set(if h.abs() > 100 {
+            HUMIDITY.with(&sensor.labels(&e.id, true)).set(if h.abs() > 100 {
                 h as f64 / 100.0
             } else {
                 h as f64
@@ -366,7 +366,7 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
                     s.name.as_deref().unwrap_or("unknown"),
                     battery
                 );
-                BATTERY.with(&s.labels(false)).set(battery);
+                BATTERY.with(&s.labels(&e.id, false)).set(battery);
             }
         } else {
             warn!("Unknown config change, ignoring it: {:?}", config)
@@ -399,8 +399,9 @@ fn register_metrics() -> PResult<()> {
 
 impl Sensor {
     /// Convert sensor into prometheus labels
-    fn labels(&self, tipe: bool) -> HashMap<&str, &str> {
+    fn labels<'a>(&'a self, id: &'a str, tipe: bool) -> HashMap<&'a str, &'a str> {
         vec![
+            ("id", id),
             (
                 "manufacturername",
                 self.manufacturername.as_ref().unwrap_or(&self.dummy),
@@ -416,7 +417,6 @@ impl Sensor {
         ]
         .into_iter()
         .filter(|(name, _)| !name.is_empty())
-        .map(|(name, value)| (name, value.as_str()))
         .collect()
     }
 

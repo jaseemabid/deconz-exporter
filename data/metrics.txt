@@ -1,21 +1,21 @@
-deconz_humidity_ratio{manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005",type="ZHAHumidity"} 79.67
-deconz_humidity_ratio{manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005",type="ZHAHumidity"} 55.22
-deconz_humidity_ratio{manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005",type="ZHAHumidity"} 56.79
-deconz_humidity_ratio{manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005",type="ZHAHumidity"} 54.08
-deconz_pressure_hpa{manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005",type="ZHAPressure"} 999
-deconz_pressure_hpa{manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005",type="ZHAPressure"} 998
-deconz_pressure_hpa{manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005",type="ZHAPressure"} 997
-deconz_pressure_hpa{manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005",type="ZHAPressure"} 997
-deconz_sensor_last_seen_ms{manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005"} 1770573000000
-deconz_sensor_last_seen_ms{manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005"} 1770573300000
-deconz_sensor_last_seen_ms{manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005"} 1770573540000
-deconz_sensor_last_seen_ms{manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005"} 1770573360000
-deconz_sensor_last_updated_ms{manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005"} 1770573007746
-deconz_sensor_last_updated_ms{manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005"} 1770573304345
-deconz_sensor_last_updated_ms{manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005"} 1770573553745
-deconz_sensor_last_updated_ms{manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005"} 1770573368009
-deconz_sensor_last_updated_ms{manufacturername="Philips",modelid="PHDL00",name="Daylight",swversion="1.0"} 1770572291303
-deconz_temperature_celsius{manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005",type="ZHATemperature"} 9.92
-deconz_temperature_celsius{manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005",type="ZHATemperature"} 20.6
-deconz_temperature_celsius{manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005",type="ZHATemperature"} 19.97
-deconz_temperature_celsius{manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005",type="ZHATemperature"} 21.15
+deconz_humidity_ratio{id="12",manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005",type="ZHAHumidity"} 79.67
+deconz_humidity_ratio{id="9",manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005",type="ZHAHumidity"} 55.22
+deconz_humidity_ratio{id="3",manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005",type="ZHAHumidity"} 56.79
+deconz_humidity_ratio{id="6",manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005",type="ZHAHumidity"} 54.08
+deconz_pressure_hpa{id="13",manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005",type="ZHAPressure"} 999
+deconz_pressure_hpa{id="10",manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005",type="ZHAPressure"} 998
+deconz_pressure_hpa{id="4",manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005",type="ZHAPressure"} 997
+deconz_pressure_hpa{id="7",manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005",type="ZHAPressure"} 997
+deconz_sensor_last_seen_ms{id="11",manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005"} 1770573000000
+deconz_sensor_last_seen_ms{id="8",manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005"} 1770573300000
+deconz_sensor_last_seen_ms{id="2",manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005"} 1770573540000
+deconz_sensor_last_seen_ms{id="5",manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005"} 1770573360000
+deconz_sensor_last_updated_ms{id="13",manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005"} 1770573007746
+deconz_sensor_last_updated_ms{id="10",manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005"} 1770573304345
+deconz_sensor_last_updated_ms{id="3",manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005"} 1770573553745
+deconz_sensor_last_updated_ms{id="7",manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005"} 1770573368009
+deconz_sensor_last_updated_ms{id="1",manufacturername="Philips",modelid="PHDL00",name="Daylight",swversion="1.0"} 1770572291303
+deconz_temperature_celsius{id="11",manufacturername="LUMI",modelid="lumi.weather",name="Balcony",swversion="0.0.0_0005",type="ZHATemperature"} 9.92
+deconz_temperature_celsius{id="8",manufacturername="LUMI",modelid="lumi.weather",name="Bedroom",swversion="0.0.0_0005",type="ZHATemperature"} 20.6
+deconz_temperature_celsius{id="2",manufacturername="LUMI",modelid="lumi.weather",name="Living Room",swversion="0.0.0_0005",type="ZHATemperature"} 19.97
+deconz_temperature_celsius{id="5",manufacturername="LUMI",modelid="lumi.weather",name="Office",swversion="0.0.0_0005",type="ZHATemperature"} 21.15

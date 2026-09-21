@@ -14,19 +14,19 @@ deconz_gateway_info{apiversion, name}
 
 # HELP deconz_battery Battery level of sensors
 # TYPE deconz_battery gauge
-deconz_battery{manufacturername, modelid, name, swversion}
+deconz_battery{id, manufacturername, modelid, name, swversion}
 
 # HELP deconz_humidity Relative humidity in percentage
 # TYPE deconz_humidity gauge
-deconz_humidity_ratio{manufacturername, modelid, name, swversion, type}
+deconz_humidity_ratio{id, manufacturername, modelid, name, swversion, type}
 
 # HELP deconz_pressure Pressure in hPa
 # TYPE deconz_pressure gauge
-deconz_pressure_hpa{manufacturername,modelid, name, swversion, type}
+deconz_pressure_hpa{id, manufacturername,modelid, name, swversion, type}
 
 # HELP deconz_temperature Temperature in degree Celsius
 # TYPE deconz_temperature gauge
-deconz_temperature_celsius{manufacturername, modelid, name, swversion, type}
+deconz_temperature_celsius{id, manufacturername, modelid, name, swversion, type}
 ```
 
 ## 🚲 Getting started
