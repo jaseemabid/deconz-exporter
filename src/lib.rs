@@ -255,7 +255,7 @@ fn stream(
 ) -> Result<(), Box<dyn Error>> {
     info!("🔌 Start listening for websocket events at {url}");
 
-    let (mut socket, _) = tungstenite::client::connect(url)?;
+    let (mut socket, _) = tungstenite::client::connect(url.as_str())?;
     loop {
         let msg_text = socket.read()?.to_text()?.to_string();
         if let Some(w) = writer.as_mut() {
@@ -344,11 +344,13 @@ fn process(e: &mut Event, state: &mut State) -> Result<(), Box<dyn Error>> {
         }
 
         if let Some(h) = change.humidity {
-            HUMIDITY.with(&sensor.labels(&e.id, true)).set(if h.abs() > 100 {
-                h as f64 / 100.0
-            } else {
-                h as f64
-            });
+            HUMIDITY
+                .with(&sensor.labels(&e.id, true))
+                .set(if h.abs() > 100 {
+                    h as f64 / 100.0
+                } else {
+                    h as f64
+                });
         }
 
         return Ok(());
@@ -537,13 +539,13 @@ mod test {
                 panic!(
                     "Failed to parse event in line {} \nEvent: {} \nError: {}",
                     linum + 1,
-                    &event,
+                    event,
                     err
                 )
             });
 
             process(&mut e, &mut state)
-                .unwrap_or_else(|err| panic!("Failed to process event {:?}: {}", &e, err));
+                .unwrap_or_else(|err| panic!("Failed to process event {:?}: {}", e, err));
         }
 
         // Now that all the data is handled, make sure metrics are present.
